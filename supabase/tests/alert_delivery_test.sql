@@ -146,11 +146,23 @@ select is((pg_temp.claim()->0->>'checked_in')::boolean, true, 'her check-in that
 
 -- 10b. An unknown zone (which the schema should already stop) doesn't abort
 --      the claim; the alert still goes out.
-alter table public.schedules drop constraint schedules_time_zone_check;
+-- Lift whatever guards the schema puts on time_zone (checks or triggers),
+-- only inside this rolled-back test.
+do $$
+declare c text;
+begin
+  for c in select conname from pg_constraint
+           where conrelid = 'public.schedules'::regclass and contype = 'c'
+             and pg_get_constraintdef(oid) ilike '%time_zone%' loop
+    execute format('alter table public.schedules drop constraint %I', c);
+  end loop;
+end $$;
+alter table public.schedules disable trigger user;
 update public.schedules set time_zone = 'Mars/Olympus' where family_id = (select id from fam);
 update public.alerts set claimed_at = null where id = (select id from a5);
 select is((pg_temp.claim()->0->>'checked_in')::boolean, false, 'unknown zone: claim still works');
 update public.schedules set time_zone = 'UTC' where family_id = (select id from fam);
+alter table public.schedules enable trigger user;
 
 -- 11. Someone acknowledging that day stops the rest.
 create temp table a6 as select pg_temp.alert(4, 2, 'urgent_push', 'Sam') as id;
