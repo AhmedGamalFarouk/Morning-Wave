@@ -366,6 +366,19 @@ void main() {
     expect(find.text('Continue with Google'), findsOneWidget);
   });
 
+  test('a wrong code is nothing, however PostgREST shapes it', () {
+    expect(joinedAFamily(null), isFalse);
+    expect(joinedAFamily(<Object>[]), isFalse);
+    expect(joinedAFamily({'id': null, 'parent_name': null}), isFalse);
+    expect(
+      joinedAFamily([
+        {'id': 'f1'},
+      ]),
+      isTrue,
+    );
+    expect(joinedAFamily({'id': 'f1'}), isTrue);
+  });
+
   test('codes show in two groups of four', () {
     expect(displayInviteCode('KX7PQ2MA'), 'KX7P Q2MA');
   });

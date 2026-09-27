@@ -123,7 +123,7 @@ class SupabaseFamilyRepository implements FamilyRepository {
       if (error.code == 'PT429') throw const TooManyCodes();
       rethrow;
     }
-    if (family == null) throw const UnknownInviteCode();
+    if (!joinedAFamily(family)) throw const UnknownInviteCode();
   }
 
   @override
@@ -177,6 +177,14 @@ class PrefsFamilyCache implements FamilyCache {
       );
     }
   }
+}
+
+/// What join_family returned names a family. A wrong code comes back as
+/// nothing: null, an empty list, or a row of nulls, depending on how
+/// PostgREST shapes the function's result.
+bool joinedAFamily(Object? result) {
+  final row = result is List ? result.firstOrNull : result;
+  return row is Map && row['id'] != null;
 }
 
 /// "KX7PQ2MA" shown as "KX7P Q2MA", easier to read out over the phone. The

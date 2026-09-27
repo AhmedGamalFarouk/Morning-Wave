@@ -50,7 +50,7 @@ class _AppGateState extends State<AppGate> {
   Auth get _auth => widget.auth;
 
   /// How this person appears to the rest of the family.
-  String get _myName => _auth.childFirstName ?? 'Family';
+  String get _myName => _auth.childFirstName ?? 'Family member';
 
   @override
   void initState() {
