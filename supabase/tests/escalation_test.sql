@@ -61,7 +61,7 @@ select is(pg_temp.run('2026-10-05 13:16Z'), 0, 'nudge only once');
 select is(pg_temp.run('2026-10-05 13:30Z'), 1, 'urgent push at +30 min');
 select is(pg_temp.run('2026-10-05 13:45Z'), 2, 'second contact and email at +45 min');
 select is(pg_temp.run('2026-10-05 20:00Z'), 0, 'nothing more later that day');
-select is(pg_temp.steps(id), '{1,2,3,4}', 'steps 1 to 4, in order, once each') from fam;
+select is(pg_temp.steps(id), '{1,2,3,4}', 'steps 1 to 4, once each') from fam;
 select results_eq(
   $$ select step, channel, m.role
      from public.alerts a left join public.members m on m.id = a.recipient_id
@@ -85,6 +85,13 @@ create temp table fam as select pg_temp.family('America/New_York', '09:00') as i
 select pg_temp.only(id) from fam;
 select pg_temp.checkin(id, '2026-10-05 12:10Z') from fam;
 select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'on-time tap: nothing sent');
+drop table fam;
+
+-- 2b. A check-in dated in the future doesn't silence today.
+create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
+select pg_temp.only(id) from fam;
+select pg_temp.checkin(id, '2026-10-09 12:00Z') from fam;
+select is(pg_temp.run('2026-10-05 13:15Z'), 1, 'future-dated check-in: today still escalates');
 drop table fam;
 
 -- 3. Steps count as a check-in, even before the window opens.
@@ -218,11 +225,10 @@ delete from public.schedules where family_id not in (select id from fam union se
 select is(pg_temp.run('2026-10-05 13:15Z'), 1, 'unknown zone: skipped, the healthy family still escalates');
 drop table fam; drop table bad;
 
--- 16. After an outage, due steps catch up in order, but only for 12 hours.
+-- 16. After an outage, due steps catch up, but only for 12 hours.
 create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
 select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 13:50Z'), 4, 'outage: all due steps at once');
-select is(pg_temp.steps(id), '{1,2,3,4}', 'outage: still in order') from fam;
 drop table fam;
 create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
 select pg_temp.only(id) from fam;

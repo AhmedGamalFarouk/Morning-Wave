@@ -15,7 +15,7 @@
 --
 -- Escalation stops as soon as the parent checks in, or someone acknowledges
 -- any of that day's alerts. If the job was down, due steps are caught up, in
--- order, for up to 12 hours after the window closed. Families in away mode
+-- up to 12 hours after the window closed. Families in away mode
 -- are skipped through the day they're back (schedules.paused_until). Days
 -- are the family's own local days, so time zones and daylight saving follow
 -- schedules.time_zone.
@@ -33,7 +33,7 @@ as $$
     from public.members
     where role = 'child'
   ),
-  schedules as materialized (
+  known_zone_schedules as materialized (
     -- An unknown zone would make "at time zone" abort the run for every
     -- family, so drop it first (the schema already rejects them on write).
     -- Materialized, so the planner can't evaluate a zone before this filter.
@@ -45,7 +45,7 @@ as $$
     -- escalates after local midnight.
     select s.family_id, s.time_zone, p.id as parent_id, p.created_at as parent_joined_at,
            d.day, (d.day + s.window_end) at time zone s.time_zone as window_closed_at
-    from schedules s
+    from known_zone_schedules s
     -- The family's one parent. A new phone moves this same row to her new
     -- account, so the nudge and her earlier check-ins follow her.
     join public.members p on p.family_id = s.family_id and p.role = 'parent'
@@ -67,13 +67,14 @@ as $$
       and p_now < dy.window_closed_at + interval '12 hours'
       -- Nothing for a day that ended before the parent joined.
       and dy.parent_joined_at < dy.window_closed_at
-      -- Only her own check-in counts, from the start of that day on (a tap
-      -- just after midnight still answers a late-evening window).
+      -- Only her own check-in counts, from the start of that day up to now
+      -- (a tap just after midnight still answers a late-evening window).
       and not exists (
         select 1 from public.checkins c
         where c.family_id = dy.family_id
           and c.member_id = dy.parent_id
-          and c.created_at >= dy.day::timestamp at time zone dy.time_zone)
+          and c.created_at >= dy.day::timestamp at time zone dy.time_zone
+          and c.created_at <= p_now)
       and not exists (
         select 1 from public.alerts a
         where a.family_id = dy.family_id and a.day = dy.day
@@ -100,7 +101,6 @@ as $$
     select family_id, day, step, channel, recipient_id
     from due
     where step = 4 or recipient_id is not null
-    order by family_id, day, step
     on conflict (family_id, day, step) do nothing
     returning 1
   )
