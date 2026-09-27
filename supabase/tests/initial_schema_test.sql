@@ -3,7 +3,7 @@
 -- Children have real accounts; parents sign in anonymously.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(37);
+select plan(38);
 
 insert into auth.users (id, email)
 select ('00000000-0000-0000-0000-00000000000' || c)::uuid, c || '@test.dev'
@@ -39,6 +39,8 @@ select throws_ok($$ select public.create_family('Mom', 'Sara', '+03') $$,
                  '23514', null, 'offsets are not time zones');
 select throws_ok($$ update public.schedules set paused_until = now() + interval '400 days' $$,
                  '23514', null, 'away mode is capped at a year');
+select throws_ok($$ update public.schedules set family_id = (select family_id from ids where who = 'b') $$,
+                 '42501', null, 'a schedule cannot move to another family');
 select throws_ok(
   $$ insert into public.checkins (family_id, member_id, source)
      select family_id, id, 'tap' from public.members $$,

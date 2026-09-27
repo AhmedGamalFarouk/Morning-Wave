@@ -176,6 +176,7 @@ alter table public.heartbeats enable row level security;
 -- the table grant back and grant those columns. Columns added later (the
 -- alert sender's bookkeeping) stay hidden by default.
 revoke select, insert, update on public.members, public.checkins, public.alerts from anon, authenticated;
+revoke insert, update on public.schedules from anon, authenticated;  -- create_family makes the row
 
 grant select (id, family_id, user_id, role, display_name, created_at) on public.members to authenticated;
 grant update (display_name, fcm_token) on public.members to authenticated;
@@ -186,6 +187,8 @@ grant insert (family_id, member_id, source, mood, media_path) on public.checkins
 grant select (id, family_id, day, step, channel, recipient_id, created_at, sent_at, acknowledged_at)
   on public.alerts to authenticated;
 grant update (acknowledged_at) on public.alerts to authenticated;
+
+grant update (window_start, window_end, time_zone, paused_until) on public.schedules to authenticated;
 
 create policy "members read their family"
   on public.families for select to authenticated
