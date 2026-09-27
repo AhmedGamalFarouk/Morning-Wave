@@ -52,8 +52,8 @@ as $$
     (select (p_day + s.window_end) at time zone s.time_zone
      from public.schedules s
      where s.family_id = p_family_id
-       -- An unknown zone would abort the whole claim.
-       and s.time_zone in (select name from pg_catalog.pg_timezone_names)),
+       -- The schema's shared rule: an unknown zone would abort the whole claim.
+       and private.is_known_zone(s.time_zone)),
     p_created_at) + interval '12 hours';
 $$;
 
@@ -67,7 +67,7 @@ as $$
   select p_day::timestamp at time zone s.time_zone
   from public.schedules s
   where s.family_id = p_family_id
-    and s.time_zone in (select name from pg_catalog.pg_timezone_names);
+    and private.is_known_zone(s.time_zone);
 $$;
 
 -- Leases ready alerts and returns everything needed to send them, as a JSON
