@@ -48,7 +48,7 @@ export function fcmSender(account: ServiceAccount, fetchFn: Fetch = fetch) {
               // channel can pass Do Not Disturb. The parent's nudge uses a
               // quieter channel.
               priority: "HIGH",
-              notification: { channel_id: p.urgent ? "urgent" : "gentle" },
+              notification: { channel_id: p.urgent ? "urgent" : "gentle", tag: p.tag },
             },
           },
         }),

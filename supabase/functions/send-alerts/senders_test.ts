@@ -35,7 +35,7 @@ async function testAccount() {
   };
 }
 
-const push = { token: "tok", title: "t", body: "b", urgent: true, data: { step: "2" } };
+const push = { token: "tok", title: "t", body: "b", urgent: true, tag: "a1", data: { step: "2" } };
 const tokenOk = () => Response.json({ access_token: "ya29.test", expires_in: 3600 });
 
 Deno.test("fcm: signs a valid JWT, sends a high-priority urgent message, reuses the token", async () => {
@@ -69,6 +69,7 @@ Deno.test("fcm: signs a valid JWT, sends a high-priority urgent message, reuses 
   assert.equal(msg.token, "tok");
   assert.equal(msg.android.priority, "HIGH");
   assert.equal(msg.android.notification.channel_id, "urgent");
+  assert.equal(msg.android.notification.tag, "a1");
   assert.equal(JSON.parse(second.init.body as string).message.android.notification.channel_id, "gentle");
 });
 

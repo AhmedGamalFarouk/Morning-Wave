@@ -5,7 +5,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(50);
+select plan(53);
 
 -- Keep cases apart: start from no alerts.
 delete from public.alerts;
@@ -23,7 +23,7 @@ select pg_temp.member('child',  'Sam', 'sam@x.test', 'tok-sam', '2026-01-02Z');
 select pg_temp.member('child',  'Lee', null,         null,      '2026-01-03Z');
 select pg_temp.member('child',  'Ana', 'ana@x.test', 'tok-ana', '2026-01-04Z');
 insert into public.schedules (family_id, window_start, window_end, time_zone)
-select id, '07:00', '09:00', 'America/New_York' from fam;
+select id, '21:00', '23:59', 'UTC' from fam;
 
 create function pg_temp.member(n text) returns uuid language sql as $$
   select id from public.members where display_name = n;
@@ -127,20 +127,30 @@ select is(pg_temp.claim()->0->'emails',
           'email to children with an address, in join order');
 
 -- 10. The parent's own check-in from the start of that local day stops
---     sending; a child's doesn't.
-create temp table day3 as
-  select (current_date + 3)::timestamp at time zone 'America/New_York' as starts;
+--     sending; one the evening before, a child's, or a future-dated one
+--     (a phone with a wrong clock) doesn't.
+create temp table today as select current_date::timestamp at time zone 'UTC' as starts;
 insert into public.checkins (family_id, member_id, source, created_at)
-select id, pg_temp.member('Mom'), 'tap', (select starts from day3) - interval '1 minute' from fam;
+select id, pg_temp.member('Mom'), 'tap', (select starts from today) - interval '1 minute' from fam;
 insert into public.checkins (family_id, member_id, source, created_at)
-select id, pg_temp.member('Sam'), 'tap', (select starts from day3) + interval '1 hour' from fam;
-create temp table a5 as select pg_temp.alert(3, 2, 'urgent_push', 'Sam') as id;
+select id, pg_temp.member('Sam'), 'tap', (select starts from today) from fam;
+insert into public.checkins (family_id, member_id, source, created_at)
+select id, pg_temp.member('Mom'), 'tap', now() + interval '10 days' from fam;
+create temp table a5 as select pg_temp.alert(0, 2, 'urgent_push', 'Sam') as id;
 select is((pg_temp.claim()->0->>'checked_in')::boolean, false,
-          'the evening before, or a child tapping, does not count');
+          'the evening before, a child tapping, or a future date does not count');
 insert into public.checkins (family_id, member_id, source, created_at)
-select id, pg_temp.member('Mom'), 'steps', (select starts from day3) from fam;
+select id, pg_temp.member('Mom'), 'steps', (select starts from today) from fam;
 update public.alerts set claimed_at = null where id = (select id from a5);
 select is((pg_temp.claim()->0->>'checked_in')::boolean, true, 'her check-in that morning counts');
+
+-- 10b. An unknown zone (which the schema should already stop) doesn't abort
+--      the claim; the alert still goes out.
+alter table public.schedules drop constraint schedules_time_zone_check;
+update public.schedules set time_zone = 'Mars/Olympus' where family_id = (select id from fam);
+update public.alerts set claimed_at = null where id = (select id from a5);
+select is((pg_temp.claim()->0->>'checked_in')::boolean, false, 'unknown zone: claim still works');
+update public.schedules set time_zone = 'UTC' where family_id = (select id from fam);
 
 -- 11. Someone acknowledging that day stops the rest.
 create temp table a6 as select pg_temp.alert(4, 2, 'urgent_push', 'Sam') as id;
@@ -198,7 +208,8 @@ select is((select last_run_at from public.heartbeats where job = 'send-alerts'),
 select ok(not has_function_privilege(r, f, 'execute'), format('%s cannot run %s', r, f))
 from unnest(array['anon', 'authenticated']) r,
      unnest(array['public.claim_alerts(integer)', 'public.finish_alert(uuid, text, boolean, text)',
-                  'private.kick_alert_sender()', 'private.alert_deadline(uuid, date, timestamptz)']) f;
+                  'private.kick_alert_sender()', 'private.alert_deadline(uuid, date, timestamptz)',
+                  'private.local_day_start(uuid, date)']) f;
 
 select * from finish();
 rollback;

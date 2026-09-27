@@ -57,6 +57,19 @@ as $$
     p_created_at) + interval '12 hours';
 $$;
 
+-- When that local day began for the family, or null if its zone is unknown.
+create or replace function private.local_day_start(p_family_id uuid, p_day date)
+returns timestamptz
+language sql
+stable
+set search_path = ''
+as $$
+  select p_day::timestamp at time zone s.time_zone
+  from public.schedules s
+  where s.family_id = p_family_id
+    and s.time_zone in (select name from pg_catalog.pg_timezone_names);
+$$;
+
 -- Leases ready alerts and returns everything needed to send them, as a JSON
 -- array (see Alert in supabase/functions/send-alerts/deliver.ts), oldest
 -- first and in step order.
@@ -103,9 +116,9 @@ as $$
     'checked_in', exists (
         select 1 from public.checkins k
         join public.members p on p.id = k.member_id and p.role = 'parent'
-        join public.schedules s on s.family_id = k.family_id
         where k.family_id = c.family_id
-          and k.created_at >= c.day::timestamp at time zone s.time_zone)
+          and k.created_at >= private.local_day_start(c.family_id, c.day)
+          and k.created_at <= now())
       or exists (
         select 1 from public.alerts o
         where o.family_id = c.family_id and o.day = c.day
@@ -180,13 +193,15 @@ end;
 $$;
 
 -- Server only: no API role may call these. The Edge Function uses the
--- service role, which also needs the private schema for alert_deadline.
+-- service role, which also needs the private schema for the two helpers.
 revoke all on function private.alert_deadline(uuid, date, timestamptz) from public, anon, authenticated;
+revoke all on function private.local_day_start(uuid, date) from public, anon, authenticated;
 revoke all on function public.claim_alerts(integer) from public, anon, authenticated;
 revoke all on function public.finish_alert(uuid, text, boolean, text) from public, anon, authenticated;
 revoke all on function private.kick_alert_sender() from public, anon, authenticated;
 grant usage on schema private to service_role;
 grant execute on function private.alert_deadline(uuid, date, timestamptz) to service_role;
+grant execute on function private.local_day_start(uuid, date) to service_role;
 grant execute on function public.claim_alerts(integer) to service_role;
 grant execute on function public.finish_alert(uuid, text, boolean, text) to service_role;
 

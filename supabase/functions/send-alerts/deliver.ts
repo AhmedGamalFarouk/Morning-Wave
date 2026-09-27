@@ -28,6 +28,8 @@ export interface Push {
   title: string;
   body: string;
   urgent: boolean;
+  /** Same tag, same notification: a repeat send replaces it instead of adding one. */
+  tag: string;
   data: Record<string, string>;
 }
 
@@ -70,5 +72,11 @@ async function deliver(alert: Alert, deps: Deps): Promise<Outcome> {
 
   if (!alert.fcm_token) return { kind: "failed", error: "no_token" };
   const words = alert.step === 1 ? parentNudge() : childPush(alert.parent_name);
-  return await deps.push({ token: alert.fcm_token, ...words, urgent: alert.channel === "urgent_push", data });
+  return await deps.push({
+    token: alert.fcm_token,
+    ...words,
+    urgent: alert.channel === "urgent_push",
+    tag: String(alert.id),
+    data,
+  });
 }
