@@ -14,6 +14,9 @@ class Notifications {
     importance: Importance.max,
   );
 
+  /// Every channel [init] creates, by id.
+  static final _channels = {urgentChannel.id: urgentChannel};
+
   static final _plugin = FlutterLocalNotificationsPlugin();
 
   static AndroidFlutterLocalNotificationsPlugin? get _android => _plugin
@@ -27,7 +30,9 @@ class Notifications {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
     );
-    await _android?.createNotificationChannel(urgentChannel);
+    for (final channel in _channels.values) {
+      await _android?.createNotificationChannel(channel);
+    }
   }
 
   /// Shows the system prompt on Android 13+. Returns true if allowed.
@@ -39,17 +44,18 @@ class Notifications {
   static Future<void> showForeground(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
+    // Use the channel the server picked, so quiet messages stay quiet.
+    final channel = _channels[notification.android?.channelId] ?? urgentChannel;
     await _plugin.show(
       id: notification.hashCode,
       title: notification.title,
       body: notification.body,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
-          urgentChannel.id,
-          urgentChannel.name,
-          channelDescription: urgentChannel.description,
-          importance: urgentChannel.importance,
-          priority: Priority.high,
+          channel.id,
+          channel.name,
+          channelDescription: channel.description,
+          importance: channel.importance,
         ),
       ),
     );
