@@ -1,0 +1,24 @@
+name: Edge Functions
+
+on:
+  pull_request:
+    paths: [supabase/functions/**, .github/workflows/functions.yml]
+  push:
+    branches: [main]
+    paths: [supabase/functions/**]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase/functions/send-alerts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno fmt --check
+      - run: deno lint
+      - run: deno check index.ts
+      - run: deno test
