@@ -27,7 +27,6 @@
 --   project_url            https://<ref>.supabase.co
 --   alerts_webhook_secret  same value as the function's ALERTS_WEBHOOK_SECRET
 
-create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 
 alter table public.alerts
@@ -111,7 +110,7 @@ as $$
        from public.members m
        where m.family_id = c.family_id and m.role = 'child' and m.email is not null),
       '[]'::jsonb) else '[]'::jsonb end,
-    -- The escalation job's rule: once the parent has checked in herself that
+    -- The escalation job's rule: once the parent has checked in that
     -- day, or someone has acknowledged it, nothing more goes out.
     'checked_in', exists (
         select 1 from public.checkins k
