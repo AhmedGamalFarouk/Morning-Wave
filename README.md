@@ -34,7 +34,7 @@ implement it, and `PRODUCT.md` the product facts design work relies on.
 | File | What goes in it | Where to get it |
 | --- | --- | --- |
 | `config/dev.json` | Copy `config/example.json`, set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` | Supabase dashboard, Project Settings > API Keys |
-| `GOOGLE_WEB_CLIENT_ID` in `config/dev.json` | The **Web** OAuth client ID (Google sign-in hands Supabase a token for it) | Google Cloud console, APIs & Services > Credentials. Also create an **Android** client for `app.morningwave` with your debug SHA-1, and turn on Google (with this client ID) and Anonymous sign-ins in Supabase Auth > Providers |
+| `GOOGLE_WEB_CLIENT_ID` in `config/dev.json` | The **Web** OAuth client ID (Google sign-in hands Supabase a token for it). It's public and already in `config/example.json` | Google Cloud project `morning-wave`, APIs & Services > Credentials. It also has an **Android** client for `app.morningwave` with the debug SHA-1; add your own debug SHA-1 there if you build on another machine. The consent screen is in testing mode, so only listed test users can sign in. Supabase Auth > Providers needs Google (with this client ID) and Anonymous sign-ins turned on |
 | `android/app/google-services.json` | Firebase Android config for package `app.morningwave` | Firebase console, Project settings > Your apps > Add Android app |
 
 Both paths are in `.gitignore`. When `google-services.json` is present the
