@@ -1,0 +1,121 @@
+-- Missed-morning escalation.
+--
+-- Every minute, pg_cron runs public.run_escalation(). It finds families whose
+-- check-in window ended with no check-in (tap or steps) that local day and
+-- inserts the alert rows that are due. The "Alert sender" Edge Function
+-- delivers them; this migration only creates the rows.
+--
+--   step 1  window end + 15 min  push         to the parent (a gentle nudge)
+--   step 2  window end + 30 min  urgent push  to the first child
+--   step 3  window end + 45 min  push         to the second child, if there is one
+--   step 4  window end + 45 min  email        to everyone (recipient null)
+--
+-- The unique (family_id, day, step) rule on alerts makes each step fire at
+-- most once per family per local day, however often the job runs.
+--
+-- Escalation stops as soon as the parent checks in, or someone acknowledges
+-- any of that day's alerts. If the job was down, due steps are caught up, in
+-- order, for up to 12 hours after the window closed. Families in away mode
+-- are skipped until their return day (schedules.paused_until). Days are the
+-- family's own local days, so time zones and daylight saving follow
+-- schedules.time_zone.
+
+create extension if not exists pg_cron with schema pg_catalog;
+
+create or replace function public.escalate_missed_checkins(p_now timestamptz default now())
+returns integer
+language sql
+set search_path = ''
+as $$
+  with parents as (
+    -- The earliest parent to join gets the nudge.
+    select distinct on (family_id) family_id, id, created_at
+    from public.members
+    where role = 'parent'
+    order by family_id, created_at, id
+  ),
+  children as (
+    select family_id, id,
+           row_number() over (partition by family_id order by created_at, id) as rank
+    from public.members
+    where role = 'child'
+  ),
+  days as (
+    -- Look at yesterday too, so a window that ends late in the evening still
+    -- escalates after local midnight.
+    select s.family_id, s.time_zone, p.id as parent_id, d.day,
+           (d.day + s.window_end) at time zone s.time_zone as window_closed_at
+    from public.schedules s
+    join parents p on p.family_id = s.family_id
+    cross join lateral (
+      values ((p_now at time zone s.time_zone)::date),
+             ((p_now at time zone s.time_zone)::date - 1)
+    ) as d(day)
+    where s.paused_until is null or d.day >= s.paused_until
+  ),
+  missed as (
+    select dy.*
+    from days dy
+    -- Catch up after an outage for up to 12 hours, then let the day go: an
+    -- alert about yesterday morning would only confuse people.
+    where p_now >= dy.window_closed_at
+      and p_now < dy.window_closed_at + interval '12 hours'
+      -- Nothing for a day that ended before the parent joined.
+      and exists (select 1 from parents p
+                  where p.family_id = dy.family_id and p.created_at < dy.window_closed_at)
+      and not exists (
+        select 1 from public.checkins c
+        where c.family_id = dy.family_id
+          and c.created_at >= dy.day::timestamp at time zone dy.time_zone
+          and c.created_at < (dy.day + 1)::timestamp at time zone dy.time_zone)
+      and not exists (
+        select 1 from public.alerts a
+        where a.family_id = dy.family_id and a.day = dy.day
+          and a.acknowledged_at is not null)
+  ),
+  due as (
+    select m.family_id, m.day, st.step, st.channel,
+           case st.step
+             when 1 then m.parent_id
+             when 2 then (select id from children c where c.family_id = m.family_id and c.rank = 1)
+             when 3 then (select id from children c where c.family_id = m.family_id and c.rank = 2)
+           end as recipient_id
+    from missed m
+    cross join (values
+      (1, interval '15 minutes', 'push'),
+      (2, interval '30 minutes', 'urgent_push'),
+      (3, interval '45 minutes', 'push'),
+      (4, interval '45 minutes', 'email')
+    ) as st(step, delay, channel)
+    where m.window_closed_at + st.delay <= p_now
+  ),
+  inserted as (
+    insert into public.alerts (family_id, day, step, channel, recipient_id)
+    select family_id, day, step, channel, recipient_id
+    from due
+    where step = 4 or recipient_id is not null
+    order by family_id, day, step
+    on conflict (family_id, day, step) do nothing
+    returning 1
+  )
+  select count(*)::integer from inserted;
+$$;
+
+-- The job pg_cron runs. The heartbeat is written in the same transaction, so
+-- a failing run leaves the heartbeat stale and the uptime check notices.
+create or replace function public.run_escalation()
+returns void
+language sql
+set search_path = ''
+as $$
+  select public.escalate_missed_checkins();
+  insert into public.heartbeats (job, last_run_at)
+  values ('escalation', now())
+  on conflict (job) do update set last_run_at = excluded.last_run_at;
+$$;
+
+-- Server only: no API role may call these.
+revoke all on function public.escalate_missed_checkins(timestamptz) from public, anon, authenticated;
+revoke all on function public.run_escalation() from public, anon, authenticated;
+
+select cron.schedule('escalation', '* * * * *', 'select public.run_escalation()');
