@@ -14,8 +14,21 @@ class Notifications {
     importance: Importance.max,
   );
 
+  /// For everyday nudges, like the parent's reminder to say good morning.
+  /// Server pushes set `channel_id: "gentle"`. Normal importance: it sounds,
+  /// but never pops over what the parent is doing.
+  static const gentleChannel = AndroidNotificationChannel(
+    'gentle',
+    'Good morning notes',
+    description: 'Little reminders and notes from your family.',
+    importance: Importance.defaultImportance,
+  );
+
   /// Every channel [init] creates, by id.
-  static final _channels = {urgentChannel.id: urgentChannel};
+  static final _channels = {
+    urgentChannel.id: urgentChannel,
+    gentleChannel.id: gentleChannel,
+  };
 
   static final _plugin = FlutterLocalNotificationsPlugin();
 
@@ -45,7 +58,8 @@ class Notifications {
     final notification = message.notification;
     if (notification == null) return;
     // Use the channel the server picked, so quiet messages stay quiet.
-    final channel = _channels[notification.android?.channelId] ?? urgentChannel;
+    // Anything unrecognised goes out gently rather than as an alarm.
+    final channel = _channels[notification.android?.channelId] ?? gentleChannel;
     await _plugin.show(
       id: notification.hashCode,
       title: notification.title,
