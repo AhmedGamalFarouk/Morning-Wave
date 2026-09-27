@@ -14,13 +14,12 @@
 -- most once per family per local day, however often the job runs.
 --
 -- Escalation stops as soon as the parent checks in, or someone acknowledges
--- any of that day's alerts. If the job was down, due steps are caught up
--- for up to 12 hours after the window closed. Families in away mode
--- are skipped through the day they're back (schedules.paused_until). Days
--- are the family's own local days, so time zones and daylight saving follow
--- schedules.time_zone.
-
-create extension if not exists pg_cron with schema pg_catalog;
+-- any of that day's alerts (the app must set acknowledged_at only on a
+-- deliberate tap, never when a notification is merely opened). If the job
+-- was down, due steps are caught up for up to 12 hours after the window
+-- closed. Families in away mode are skipped through the day the parent is
+-- back (schedules.paused_until). Days are the family's own local days, so
+-- time zones and daylight saving follow schedules.time_zone.
 
 create or replace function public.escalate_missed_checkins(p_now timestamptz default now())
 returns integer
@@ -46,15 +45,15 @@ as $$
     select s.family_id, s.time_zone, p.id as parent_id, p.created_at as parent_joined_at,
            d.day, (d.day + s.window_end) at time zone s.time_zone as window_closed_at
     from known_zone_schedules s
-    -- The family's one parent. A new phone moves this same row to her new
-    -- account, so the nudge and her earlier check-ins follow her.
+    -- The family's one parent. A new phone moves this same row to the new
+    -- account, so the nudge and earlier check-ins follow the parent.
     join public.members p on p.family_id = s.family_id and p.role = 'parent'
     cross join lateral (
       values ((p_now at time zone s.time_zone)::date),
              ((p_now at time zone s.time_zone)::date - 1)
     ) as d(day)
-    -- Away mode: paused_until falls on the day she's back, and mornings
-    -- resume the day after, whatever time of that day it holds.
+    -- Away mode: paused_until falls on the day the parent is back, and
+    -- mornings resume the day after, whatever time of that day it holds.
     where s.paused_until is null
        or d.day > (s.paused_until at time zone s.time_zone)::date
   ),
@@ -67,8 +66,9 @@ as $$
       and p_now < dy.window_closed_at + interval '12 hours'
       -- Nothing for a day that ended before the parent joined.
       and dy.parent_joined_at < dy.window_closed_at
-      -- Only her own check-in counts, from the start of that day up to now
-      -- (a tap just after midnight still answers a late-evening window).
+      -- Only the parent's own check-in counts, from the start of that day up
+      -- to now (a tap just after midnight still answers a late-evening
+      -- window).
       and not exists (
         select 1 from public.checkins c
         where c.family_id = dy.family_id
