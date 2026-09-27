@@ -357,8 +357,9 @@ String _dayName(BuildContext context, DateTime day, DateTime today) {
   return 'on ${MaterialLocalizations.of(context).formatMediumDate(day)}';
 }
 
-/// Asks which day the parent will be back. Mornings resume on their own
-/// that day, so nothing needs switching back on.
+/// Asks which day the parent will be back. That day is a rest day too;
+/// mornings resume on their own the day after, so nothing needs switching
+/// back on.
 class _AwaySheet extends StatefulWidget {
   const _AwaySheet({required this.today});
 
@@ -407,8 +408,8 @@ class _AwaySheetState extends State<_AwaySheet> {
             Text('Going somewhere?', style: text.headlineMedium),
             const SizedBox(height: 12),
             Text(
-              'When will you be back? Your family won’t expect your good '
-              'morning until then.',
+              'When will you be back? Your family won’t expect a good '
+              'morning while you’re away, or on the day you get home.',
               style: text.bodyLarge,
             ),
             const SizedBox(height: 20),
