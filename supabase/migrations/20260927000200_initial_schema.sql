@@ -3,15 +3,21 @@
 -- Writes that need to cross that line (creating or joining a family) go through
 -- the security definer functions at the bottom. The service role (pg_cron job,
 -- Edge Functions) bypasses RLS.
+--
+-- Sign-in: children use a real account; the parent signs in anonymously and
+-- is only ever let in by the single-use parent code.
 
 create schema if not exists private;
+create extension if not exists pg_cron with schema pg_catalog;
 
--- Invite codes ----------------------------------------------------------------
--- Read aloud over the phone: 8 characters from an alphabet without look-alikes
--- (no 0/O, 1/I). 32 symbols, so byte % 32 is unbiased.
+grant usage on schema private to authenticated;
+
+-- Helpers -------------------------------------------------------------------
+
+-- Invite codes are read aloud over the phone: 8 characters from an alphabet
+-- without look-alikes (no 0/O, 1/I). 32 symbols, so byte % 32 is unbiased.
 -- ponytail: no retry on a collision (32^8 codes); the unique index turns one
 -- into an error the caller can retry.
-
 create function private.new_invite_code()
 returns text
 language sql volatile set search_path = ''
@@ -20,14 +26,33 @@ as $$
   from extensions.gen_random_bytes(8) b, generate_series(0, 7) i
 $$;
 
+-- Only full IANA names ('Europe/London'); the escalation job relies on it.
+-- Abbreviations and offsets like 'PST' or '+03' are rejected.
+create function private.is_known_zone(tz text)
+returns boolean
+language sql stable set search_path = ''
+as $$
+  select exists (select 1 from pg_catalog.pg_timezone_names where name = tz)
+$$;
+
+create function private.is_anonymous()
+returns boolean
+language sql stable set search_path = ''
+as $$
+  select coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false)
+$$;
+
 revoke all on function private.new_invite_code() from public;
+revoke all on function private.is_anonymous() from public;
+grant execute on function private.is_known_zone(text) to authenticated;  -- used by a CHECK
 
 -- Families ------------------------------------------------------------------
 -- A family is named for its parent, as the children call them ("Mom").
 -- Two codes, and the code decides the role:
 --   parent_code  lets one parent in, then is cleared. A child issues a new one
 --                with reinvite_parent() after a reinstall or new phone.
---   child_code   lets siblings in, any number of times.
+--   child_code   lets siblings in, any number of times; rotate_child_code()
+--                replaces it.
 
 create table public.families (
   id          uuid primary key default gen_random_uuid(),
@@ -39,15 +64,15 @@ create table public.families (
 
 -- Members -------------------------------------------------------------------
 -- Escalation order among children is join order (created_at): the first child
--- is the primary contact, the next one the 2nd contact.
+-- is the primary contact, the next one the 2nd contact. Email addresses stay
+-- in auth.users.
 
 create table public.members (
   id           uuid primary key default gen_random_uuid(),
   family_id    uuid not null references public.families on delete cascade,
   user_id      uuid not null references auth.users on delete cascade,
   role         text not null check (role in ('parent', 'child')),
-  display_name text not null,
-  email        text,
+  display_name text not null check (char_length(display_name) between 1 and 60),
   fcm_token    text,
   created_at   timestamptz not null default now(),
   unique (family_id, user_id),
@@ -59,15 +84,14 @@ create table public.members (
 create index members_user_id_idx on public.members (user_id);
 create unique index members_one_parent_idx on public.members (family_id) where role = 'parent';
 
--- Schedules (one per family) ------------------------------------------------
+-- Schedules (one per family, made by create_family) -------------------------
 
 create table public.schedules (
   family_id    uuid primary key references public.families on delete cascade,
   window_start time not null default '07:00',
   window_end   time not null default '10:00',
-  time_zone    text not null default 'UTC'
-               check ((now() at time zone time_zone) is not null), -- rejects unknown zones
-  paused_until timestamptz,  -- "I'm away" mode
+  time_zone    text not null check (private.is_known_zone(time_zone)),
+  paused_until timestamptz check (paused_until <= now() + interval '365 days'),  -- "I'm away"
   check (window_start < window_end)
 );
 
@@ -78,9 +102,9 @@ create table public.checkins (
   family_id  uuid not null,
   member_id  uuid not null,
   source     text not null check (source in ('tap', 'steps')),
-  mood       text,
-  media_path text,  -- Storage object path (voice note or photo)
-  created_at timestamptz not null default now(),
+  mood       text check (char_length(mood) <= 40),
+  media_path text check (media_path like family_id::text || '/%'),  -- Storage object path
+  created_at timestamptz not null default now(),  -- server-set: not client-insertable
   foreign key (family_id, member_id) references public.members (family_id, id) on delete cascade
 );
 
@@ -122,6 +146,9 @@ create table private.join_attempts (
 
 create index join_attempts_user_idx on private.join_attempts (user_id, attempted_at);
 
+select cron.schedule('join-attempts-cleanup', '17 3 * * *',
+  $$delete from private.join_attempts where attempted_at < now() - interval '1 day'$$);
+
 -- Row Level Security --------------------------------------------------------
 
 -- Security definer so policies on members can use it without recursing into
@@ -134,7 +161,6 @@ as $$
 $$;
 
 revoke all on function private.my_family_ids() from public;
-grant usage on schema private to authenticated;
 grant execute on function private.my_family_ids() to authenticated;
 
 alter table public.families   enable row level security;
@@ -144,6 +170,22 @@ alter table public.checkins   enable row level security;
 alter table public.alerts     enable row level security;
 alter table public.heartbeats enable row level security;
 
+-- Supabase grants every privilege on new public tables to anon and
+-- authenticated. Where clients should see or write only some columns, take
+-- the table grant back and grant those columns. Columns added later (the
+-- alert sender's bookkeeping) stay hidden by default.
+revoke select, insert, update on public.members, public.checkins, public.alerts from anon, authenticated;
+
+grant select (id, family_id, user_id, role, display_name, created_at) on public.members to authenticated;
+grant update (display_name, fcm_token) on public.members to authenticated;
+
+grant select on public.checkins to authenticated;
+grant insert (family_id, member_id, source, mood, media_path) on public.checkins to authenticated;
+
+grant select (id, family_id, day, step, channel, recipient_id, created_at, sent_at, acknowledged_at)
+  on public.alerts to authenticated;
+grant update (acknowledged_at) on public.alerts to authenticated;
+
 create policy "members read their family"
   on public.families for select to authenticated
   using (id in (select private.my_family_ids()));
@@ -151,10 +193,6 @@ create policy "members read their family"
 create policy "members read their family's members"
   on public.members for select to authenticated
   using (family_id in (select private.my_family_ids()));
-
--- Only these columns are client-editable, and only on your own row.
-revoke update on public.members from anon, authenticated;
-grant update (display_name, fcm_token) on public.members to authenticated;
 
 create policy "members update themselves"
   on public.members for update to authenticated
@@ -165,10 +203,6 @@ create policy "members read their schedule"
   on public.schedules for select to authenticated
   using (family_id in (select private.my_family_ids()));
 
-create policy "members create their schedule"
-  on public.schedules for insert to authenticated
-  with check (family_id in (select private.my_family_ids()));
-
 create policy "members change their schedule"
   on public.schedules for update to authenticated
   using (family_id in (select private.my_family_ids()))
@@ -178,17 +212,16 @@ create policy "members read their check-ins"
   on public.checkins for select to authenticated
   using (family_id in (select private.my_family_ids()));
 
--- The composite FK ties member_id to family_id, so owning the member row is enough.
-create policy "members check in as themselves"
+-- Only the parent checks in. The composite FK ties member_id to family_id,
+-- so owning the parent member row is enough.
+create policy "the parent checks in as themselves"
   on public.checkins for insert to authenticated
-  with check (member_id in (select id from public.members where user_id = (select auth.uid())));
+  with check (member_id in (select id from public.members
+                            where user_id = (select auth.uid()) and role = 'parent'));
 
 create policy "members read their alerts"
   on public.alerts for select to authenticated
   using (family_id in (select private.my_family_ids()));
-
-revoke update on public.alerts from anon, authenticated;
-grant update (acknowledged_at) on public.alerts to authenticated;
 
 create policy "members acknowledge their alerts"
   on public.alerts for update to authenticated
@@ -196,35 +229,43 @@ create policy "members acknowledge their alerts"
   with check (family_id in (select private.my_family_ids()));
 
 -- Family creation and invite codes ------------------------------------------
+-- The parent code takes only anonymous callers; everything else rejects them.
+-- my_name is checked by members.display_name (1 to 60 characters).
 
 -- An adult child starts a family for their parent and becomes its first member.
-create function public.create_family(parent_name text, my_name text)
+-- time_zone is the parent's, e.g. 'Africa/Cairo'.
+create function public.create_family(parent_name text, my_name text, time_zone text)
 returns public.families
 language plpgsql security definer set search_path = ''
 as $$
 declare
   fam public.families;
 begin
-  insert into public.families (parent_name) values (trim(parent_name)) returning * into fam;
-  insert into public.members (family_id, user_id, role, display_name, email)
-  values (fam.id, auth.uid(), 'child', my_name, auth.jwt() ->> 'email');
+  if auth.uid() is null or private.is_anonymous() then
+    raise exception 'sign in to start a family' using errcode = '42501';
+  end if;
+  insert into public.families (parent_name) values (trim(create_family.parent_name)) returning * into fam;
+  insert into public.members (family_id, user_id, role, display_name)
+  values (fam.id, auth.uid(), 'child', my_name);
+  insert into public.schedules (family_id, time_zone) values (fam.id, create_family.time_zone);
   return fam;
 end
 $$;
 
 -- Joins with either code; the code decides the role. Spaces, dashes and case
--- are ignored. A wrong code returns null (not an error, so the attempt is
+-- are ignored. A wrong code returns no rows (not an error, so the attempt is
 -- kept); after 10 wrong codes in an hour it raises PT429.
 -- The parent's member row takes the family's parent_name. If the family
--- already has a parent (re-invite), that row moves to the caller, so the
--- check-in history stays and the old phone loses access.
+-- already has a parent (re-invite), that row moves to the caller in the same
+-- transaction, so there is never a second parent, the check-in history stays
+-- and the old phone loses access.
 create function public.join_family(code text, my_name text)
-returns public.families
+returns setof public.families
 language plpgsql security definer set search_path = ''
 as $$
 declare
-  me  uuid := auth.uid();
-  fam public.families;
+  me    uuid := auth.uid();
+  fam   public.families;
   typed text := upper(regexp_replace(code, '[\s-]', '', 'g'));
 begin
   if me is null then
@@ -237,28 +278,51 @@ begin
 
   select * into fam from public.families where parent_code = typed for update;
   if found then
-    update public.members set user_id = me, display_name = fam.parent_name,
-                              email = auth.jwt() ->> 'email', fcm_token = null
+    -- Only the parent's own (anonymous) sign-in, so a sibling can't use up the code.
+    if not private.is_anonymous() then
+      raise exception 'the parent code is for the parent''s phone' using errcode = '42501';
+    end if;
+    update public.members set user_id = me, display_name = fam.parent_name, fcm_token = null
       where family_id = fam.id and role = 'parent';
     if not found then
-      insert into public.members (family_id, user_id, role, display_name, email)
-      values (fam.id, me, 'parent', fam.parent_name, auth.jwt() ->> 'email');
+      insert into public.members (family_id, user_id, role, display_name)
+      values (fam.id, me, 'parent', fam.parent_name);
     end if;
     update public.families set parent_code = null where id = fam.id returning * into fam;
-    return fam;
+    return next fam;
+    return;
   end if;
 
   select * into fam from public.families where child_code = typed;
   if found then
-    insert into public.members (family_id, user_id, role, display_name, email)
-    values (fam.id, me, 'child', my_name, auth.jwt() ->> 'email');
-    return fam;
+    if private.is_anonymous() then
+      raise exception 'sign in to join as a family member' using errcode = '42501';
+    end if;
+    insert into public.members (family_id, user_id, role, display_name)
+    values (fam.id, me, 'child', my_name);
+    return next fam;
+    return;
   end if;
 
   insert into private.join_attempts (user_id) values (me);
-  return null;
 end
 $$;
+
+-- Raises 42501 unless the caller is a signed-in (not anonymous) child of the family.
+create function private.require_child_of(family uuid)
+returns void
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if private.is_anonymous() or not exists (
+       select 1 from public.members
+       where family_id = family and user_id = auth.uid() and role = 'child') then
+    raise exception 'only a child of this family can do that' using errcode = '42501';
+  end if;
+end
+$$;
+
+revoke all on function private.require_child_of(uuid) from public;
 
 -- A child issues a fresh parent code, for a new phone or a reinstall.
 create function public.reinvite_parent(family_id uuid)
@@ -268,20 +332,33 @@ as $$
 declare
   fam public.families;
 begin
-  if not exists (select 1 from public.members m
-                 where m.family_id = reinvite_parent.family_id
-                   and m.user_id = auth.uid() and m.role = 'child') then
-    raise exception 'only a child of this family can re-invite the parent' using errcode = '42501';
-  end if;
+  perform private.require_child_of(reinvite_parent.family_id);
   update public.families f set parent_code = private.new_invite_code()
     where f.id = reinvite_parent.family_id returning * into fam;
   return fam;
 end
 $$;
 
-revoke all on function public.create_family(text, text) from public, anon;
+-- A child replaces the sibling code, e.g. after sharing it too widely.
+create function public.rotate_child_code(family_id uuid)
+returns public.families
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  fam public.families;
+begin
+  perform private.require_child_of(rotate_child_code.family_id);
+  update public.families f set child_code = private.new_invite_code()
+    where f.id = rotate_child_code.family_id returning * into fam;
+  return fam;
+end
+$$;
+
+revoke all on function public.create_family(text, text, text) from public, anon;
 revoke all on function public.join_family(text, text) from public, anon;
 revoke all on function public.reinvite_parent(uuid) from public, anon;
-grant execute on function public.create_family(text, text) to authenticated;
+revoke all on function public.rotate_child_code(uuid) from public, anon;
+grant execute on function public.create_family(text, text, text) to authenticated;
 grant execute on function public.join_family(text, text) to authenticated;
 grant execute on function public.reinvite_parent(uuid) to authenticated;
+grant execute on function public.rotate_child_code(uuid) to authenticated;
