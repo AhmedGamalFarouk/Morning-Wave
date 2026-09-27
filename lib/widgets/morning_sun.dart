@@ -84,8 +84,6 @@ class _MorningSunState extends State<MorningSun> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = Theme.of(context).textTheme.headlineMedium!;
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final side = math.min(constraints.maxWidth * 0.9, 340.0);
@@ -100,16 +98,23 @@ class _MorningSunState extends State<MorningSun> with TickerProviderStateMixin {
             onTapUp: _enabled ? (_) => _press.reverse() : null,
             onTapCancel: _enabled ? _press.reverse : null,
             onTap: _handleTap,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_breath, _turn, _press, _celebrate]),
-              builder: (context, _) {
-                final bloom = _bloom(_celebrate.value);
-                final scale =
-                    (1 - 0.05 * Motion.settle.transform(_press.value)) *
-                    (1 + 0.1 * bloom);
-                return SizedBox.square(
-                  dimension: side,
-                  child: Stack(
+            child: SizedBox.square(
+              dimension: side,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([
+                  _breath,
+                  _turn,
+                  _press,
+                  _celebrate,
+                ]),
+                // Built once and reused every frame; only the paint changes.
+                child: _SunLabel(label: widget.label, side: side),
+                builder: (context, label) {
+                  final bloom = _bloom(_celebrate.value);
+                  final scale =
+                      (1 - 0.05 * Motion.settle.transform(_press.value)) *
+                      (1 + 0.1 * bloom);
+                  return Stack(
                     alignment: Alignment.center,
                     children: [
                       Transform.scale(
@@ -122,6 +127,7 @@ class _MorningSunState extends State<MorningSun> with TickerProviderStateMixin {
                             rayReach: 1 + 0.75 * bloom,
                             warmth: widget.warmth,
                           ),
+                          child: label,
                         ),
                       ),
                       if (_celebrate.isAnimating)
@@ -129,24 +135,10 @@ class _MorningSunState extends State<MorningSun> with TickerProviderStateMixin {
                           size: Size.square(side),
                           painter: _LightMotesPainter(_celebrate.value),
                         ),
-                      SizedBox(
-                        width: side * 0.5,
-                        child: AnimatedSwitcher(
-                          duration: Motion.crossfade,
-                          switchInCurve: Motion.fadeIn,
-                          switchOutCurve: Motion.fadeOut,
-                          child: Text(
-                            widget.label,
-                            key: ValueKey(widget.label),
-                            textAlign: TextAlign.center,
-                            style: textStyle.copyWith(height: 1.08),
-                          ),
-                        ),
-                      ),
                     ],
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         );
@@ -161,6 +153,41 @@ class _MorningSunState extends State<MorningSun> with TickerProviderStateMixin {
     return t < peak
         ? Motion.settle.transform(t / peak)
         : 1 - Motion.glow.transform((t - peak) / (1 - peak));
+  }
+}
+
+/// The words inside the sun. Lines break only where the label says; at
+/// very large system text sizes the words shrink to fit the sun instead of
+/// breaking mid-word.
+class _SunLabel extends StatelessWidget {
+  const _SunLabel({required this.label, required this.side});
+
+  final String label;
+  final double side;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        width: side * 0.5,
+        height: side * 0.42,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: AnimatedSwitcher(
+            duration: Motion.crossfade,
+            switchInCurve: Motion.fadeIn,
+            switchOutCurve: Motion.fadeOut,
+            child: Text(
+              label,
+              key: ValueKey(label),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineMedium!
+                  .copyWith(height: 1.08),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

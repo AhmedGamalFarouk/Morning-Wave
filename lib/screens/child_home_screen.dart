@@ -73,7 +73,7 @@ class _ParentHeroState extends State<_ParentHero> {
         1.0,
         Palette.glow,
         '$parent said good morning',
-        'Today · ${_clock(PlaceholderFamily.checkedInAt)}',
+        'Today · ${_clock(context, PlaceholderFamily.checkedInAt)}',
       ),
       ChildView.waiting => (
         0.6,
@@ -113,10 +113,6 @@ class _ParentHeroState extends State<_ParentHero> {
             const SizedBox(height: 28),
             FilledButton.icon(
               onPressed: _loveSent ? null : _sendLove,
-              style: FilledButton.styleFrom(
-                disabledBackgroundColor: Palette.paperDeep,
-                disabledForegroundColor: Palette.inkSoft,
-              ),
               icon: const HeartMark(color: Palette.peach),
               label: Text(_loveSent ? 'Love sent' : 'Send love'),
             ),
@@ -130,9 +126,11 @@ class _ParentHeroState extends State<_ParentHero> {
     );
   }
 
-  static String _clock(DateTime time) {
-    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute ${time.hour < 12 ? 'AM' : 'PM'}';
+  /// Follows the phone's 12 or 24-hour setting.
+  static String _clock(BuildContext context, DateTime time) {
+    return MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(time),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
   }
 }

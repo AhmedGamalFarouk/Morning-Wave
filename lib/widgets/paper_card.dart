@@ -9,13 +9,11 @@ class PaperCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(24),
-    this.color = Palette.card,
     this.gradient,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color color;
   final Gradient? gradient;
 
   static const radius = BorderRadius.all(Radius.circular(22));
@@ -24,7 +22,7 @@ class PaperCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: gradient == null ? color : null,
+        color: gradient == null ? Palette.card : null,
         gradient: gradient,
         borderRadius: radius,
         boxShadow: [

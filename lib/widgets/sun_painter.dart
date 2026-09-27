@@ -179,16 +179,15 @@ class SunMark extends StatelessWidget {
 
 /// A small drawn heart in the sunrise peach.
 class HeartMark extends StatelessWidget {
-  const HeartMark({super.key, this.size = 22, this.color = Palette.sunEdge});
+  const HeartMark({super.key, this.color = Palette.sunEdge});
 
-  final double size;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     return ExcludeSemantics(
       child: CustomPaint(
-        size: Size.square(size),
+        size: const Size.square(22),
         painter: _HeartPainter(color),
       ),
     );

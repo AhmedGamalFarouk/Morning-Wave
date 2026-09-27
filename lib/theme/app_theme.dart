@@ -40,18 +40,14 @@ TextStyle _atkinson(double size, double weight, {double height = 1.4}) {
 /// Parent-side minimums from the design language: body 20sp, primary
 /// action 28sp. Everything on the parent side uses these roles or larger.
 final _textTheme = TextTheme(
-  displayLarge: _fraunces(44, 560, height: 1.08),
   displayMedium: _fraunces(36, 560, height: 1.1),
-  headlineLarge: _fraunces(32, 560),
   headlineMedium: _fraunces(28, 600),
   headlineSmall: _fraunces(24, 560),
   titleLarge: _fraunces(22, 600),
   titleMedium: _atkinson(20, 700),
   bodyLarge: _atkinson(22, 400),
   bodyMedium: _atkinson(20, 400),
-  bodySmall: _atkinson(17, 400),
   labelLarge: _atkinson(20, 700, height: 1.2),
-  labelMedium: _atkinson(17, 600, height: 1.2),
 );
 
 ThemeData buildAppTheme() {
@@ -83,6 +79,8 @@ ThemeData buildAppTheme() {
       style: FilledButton.styleFrom(
         backgroundColor: Palette.ink,
         foregroundColor: Palette.paper,
+        disabledBackgroundColor: Palette.paperDeep,
+        disabledForegroundColor: Palette.inkSoft,
         minimumSize: const Size(64, 60),
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
         textStyle: _textTheme.labelLarge,
