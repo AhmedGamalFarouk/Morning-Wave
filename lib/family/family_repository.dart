@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -81,9 +83,17 @@ abstract interface class FamilyRepository {
 }
 
 class SupabaseFamilyRepository implements FamilyRepository {
-  SupabaseFamilyRepository(this._db);
+  SupabaseFamilyRepository(this._db, {Future<String> Function()? timeZone})
+    : _timeZone = timeZone ?? _deviceTimeZone;
 
   final SupabaseClient _db;
+
+  /// This phone's full IANA zone ("Africa/Cairo"); mornings are counted in
+  /// the parent's.
+  final Future<String> Function() _timeZone;
+
+  static Future<String> _deviceTimeZone() async =>
+      (await FlutterTimezone.getLocalTimezone()).identifier;
 
   @override
   Future<List<Membership>> myFamilies() async {
@@ -107,7 +117,13 @@ class SupabaseFamilyRepository implements FamilyRepository {
   }) async {
     await _db.rpc(
       'create_family',
-      params: {'parent_name': parentName, 'my_name': myName},
+      // The child's zone to start with; the parent's phone corrects it
+      // when it joins, for a parent who lives elsewhere.
+      params: {
+        'parent_name': parentName,
+        'my_name': myName,
+        'time_zone': await _timeZone(),
+      },
     );
   }
 
@@ -124,6 +140,28 @@ class SupabaseFamilyRepository implements FamilyRepository {
       rethrow;
     }
     if (!joinedAFamily(family)) throw const UnknownInviteCode();
+    final row = (family is List ? family.first : family) as Map;
+    await _useMyTimeZoneIfParent(row['id'] as String);
+  }
+
+  /// Best effort: a missed update leaves the child's zone, which is right
+  /// for most families, and must not stop the parent getting in.
+  Future<void> _useMyTimeZoneIfParent(String familyId) async {
+    try {
+      final me = await _db
+          .from('members')
+          .select('role')
+          .eq('family_id', familyId)
+          .eq('user_id', _db.auth.currentUser!.id)
+          .single();
+      if (me['role'] != FamilyRole.parent.name) return;
+      await _db
+          .from('schedules')
+          .update({'time_zone': await _timeZone()})
+          .eq('family_id', familyId);
+    } catch (error) {
+      debugPrint('Saving the parent’s time zone: $error');
+    }
   }
 
   @override

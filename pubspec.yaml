@@ -39,6 +39,7 @@ dependencies:
   google_sign_in: ^7.2.0
   crypto: ^3.0.7
   shared_preferences: ^2.5.5
+  flutter_timezone: ^5.1.0
 
 dev_dependencies:
   flutter_test:
