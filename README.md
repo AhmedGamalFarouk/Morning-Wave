@@ -22,17 +22,20 @@ stay off and a line in the debug log says so.
 
 Both paths are in `.gitignore`. When `google-services.json` is present the
 Google Services and Crashlytics Gradle plugins switch on automatically.
+Release builds (`flutter build apk`) fail without it, so a build without
+crash reporting can't ship by accident.
 
 ## What is wired
 
 - `supabase_flutter`, initialised from `config/*.json` via `--dart-define-from-file`.
 - `firebase_core`, `firebase_messaging`, `firebase_crashlytics` (Flutter and
   async errors go to Crashlytics).
-- `flutter_local_notifications` with an `urgent` channel (max importance).
-  Server pushes for missed check-ins should set `android.notification.channel_id`
-  to `urgent`.
+- `flutter_local_notifications` with an `urgent` channel, shown in Android
+  settings as "Family messages" (max importance). Server pushes for missed
+  check-ins should set `android.notification.channel_id` to `urgent`. Pushes
+  that arrive while the app is open are shown through this channel too.
 - Android 13+ notification permission is requested on the home screen.
-- `google_sign_in` is added but not used yet.
+- The launch screen uses the cream paper colour, so there is no white flash.
 
 ## Checks
 
