@@ -35,10 +35,10 @@ as $$
   ),
   known_zone_schedules as materialized (
     -- An unknown zone would make "at time zone" abort the run for every
-    -- family, so drop it first (the schema already rejects them on write).
+    -- family, so drop it first, by the same rule the schema checks on write.
     -- Materialized, so the planner can't evaluate a zone before this filter.
     select * from public.schedules
-    where time_zone in (select name from pg_catalog.pg_timezone_names)
+    where private.is_known_zone(time_zone)
   ),
   days as (
     -- Look at yesterday too, so a window that ends late in the evening still
