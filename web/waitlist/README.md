@@ -9,7 +9,6 @@ table in Supabase. No build step, no server, no paid services.
    (`supabase db push`, or paste it into the Supabase SQL editor).
 2. In `config.js`, fill in the project URL and the publishable (anon) key from
    Supabase: Project Settings > API. Never use the service_role or secret key.
-3. In `privacy.html`, replace `CONTACT-EMAIL` with a real address.
 
 ## Deploy on Cloudflare Pages (free)
 
