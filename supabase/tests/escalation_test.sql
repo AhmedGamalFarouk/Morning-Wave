@@ -4,20 +4,27 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(36);
+select plan(35);
 
 -- A family with a parent who joined long ago, n children and a schedule.
+create function pg_temp.member(f uuid, role text, joined timestamptz) returns uuid
+language sql as $$
+  with u as (insert into auth.users (id) values (gen_random_uuid()) returning id)
+  insert into public.members (family_id, user_id, role, display_name, created_at)
+  select f, u.id, role, role, joined from u
+  returning id;
+$$;
+
 create function pg_temp.family(tz text, window_end time, n_children int default 2,
-                               paused_until date default null,
+                               paused_until timestamptz default null,
                                parent_joined timestamptz default '2026-01-01Z')
 returns uuid language plpgsql as $$
 declare f uuid;
 begin
-  insert into public.families (name) values ('test') returning id into f;
-  insert into public.members (family_id, role, created_at) values (f, 'parent', parent_joined);
+  insert into public.families (parent_name) values ('Mom') returning id into f;
+  perform pg_temp.member(f, 'parent', parent_joined);
   for i in 1..n_children loop
-    insert into public.members (family_id, role, created_at)
-    values (f, 'child', '2026-01-01Z'::timestamptz + i * interval '1 minute');
+    perform pg_temp.member(f, 'child', '2026-01-01Z'::timestamptz + i * interval '1 minute');
   end loop;
   insert into public.schedules (family_id, window_start, window_end, time_zone, paused_until)
   values (f, window_end - interval '2 hours', window_end, tz, paused_until);
@@ -35,7 +42,7 @@ create function pg_temp.run(at timestamptz) returns int language sql as $$
 $$;
 
 create function pg_temp.steps(f uuid) returns int[] language sql as $$
-  select coalesce(array_agg(step order by id), '{}') from public.alerts where family_id = f;
+  select coalesce(array_agg(step order by step), '{}') from public.alerts where family_id = f;
 $$;
 
 -- Keep each case to its own family: delete everyone else's schedule first.
@@ -107,7 +114,8 @@ drop table fam;
 
 -- 6. Away mode sends nothing through the day she's back, then resumes.
 create temp table fam as
-  select pg_temp.family('America/New_York', '09:00', paused_until => '2026-10-07') as id;
+  select pg_temp.family('America/New_York', '09:00',
+                        paused_until => '2026-10-07 18:00-04') as id;
 select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'away: nothing sent');
 select is(pg_temp.run('2026-10-07 14:00Z'), 0, 'away, the day she''s back: nothing sent');
@@ -161,23 +169,17 @@ select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 16:00Z'), 0, 'setup day: nothing sent');
 drop table fam;
 
--- 12. A new phone replaces the parent's row: the nudge goes to the new one,
---     and re-joining after the window counts as hearing from her that day.
+-- 12. A new phone moves the parent's row to her new account (join_family),
+--     so the nudge goes to the same member row.
 create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
 select pg_temp.only(id) from fam;
-create function pg_temp.new_phone(f uuid, at timestamptz) returns uuid language sql as $$
-  delete from public.members where family_id = f and role = 'parent';
-  insert into public.members (family_id, role, created_at) values (f, 'parent', at) returning id;
-$$;
-create temp table new_parent as select pg_temp.new_phone(id, '2026-10-05 12:00Z') as id from fam;
+insert into auth.users (id) values ('00000000-0000-0000-0000-0000000000aa');
+update public.members set user_id = '00000000-0000-0000-0000-0000000000aa', fcm_token = null
+where family_id = (select id from fam) and role = 'parent';
 select pg_temp.run('2026-10-05 13:15Z');
-select is((select recipient_id from public.alerts a join fam on a.family_id = fam.id where step = 1),
-          (select id from new_parent), 'new phone before the window: nudge goes to the new parent row');
-drop table fam;
-create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
-select pg_temp.only(id) from fam;
-select pg_temp.new_phone(id, '2026-10-05 13:05Z') from fam;
-select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'new phone after the window: nothing sent that day');
+select is((select m.user_id from public.alerts a join public.members m on m.id = a.recipient_id
+           where a.family_id = (select id from fam) and a.step = 1),
+          '00000000-0000-0000-0000-0000000000aa'::uuid, 'new phone: the nudge goes to her new account');
 drop table fam;
 
 -- 13. After an outage, due steps catch up in order, but only for 12 hours.

@@ -16,7 +16,7 @@
 -- Escalation stops as soon as the parent checks in, or someone acknowledges
 -- any of that day's alerts. If the job was down, due steps are caught up, in
 -- order, for up to 12 hours after the window closed. Families in away mode
--- are skipped through their return day (schedules.paused_until). Days are the
+-- are skipped through the day they're back (schedules.paused_until). Days are the
 -- family's own local days, so time zones and daylight saving follow
 -- schedules.time_zone.
 
@@ -28,7 +28,8 @@ language sql
 set search_path = ''
 as $$
   with parents as (
-    -- One parent per family: a re-invite (new phone) replaces the row.
+    -- One parent per family. A re-invite (new phone) moves the same row to
+    -- the new account, so the nudge follows her.
     select family_id, id, created_at
     from public.members
     where role = 'parent'
@@ -50,8 +51,10 @@ as $$
       values ((p_now at time zone s.time_zone)::date),
              ((p_now at time zone s.time_zone)::date - 1)
     ) as d(day)
-    -- paused_until is the day she's back; mornings resume the day after.
-    where s.paused_until is null or d.day > s.paused_until
+    -- Away mode: paused_until falls on the day she's back, and mornings
+    -- resume the day after, whatever time of that day it holds.
+    where s.paused_until is null
+       or d.day > (s.paused_until at time zone s.time_zone)::date
   ),
   missed as (
     select dy.*
@@ -60,8 +63,7 @@ as $$
     -- alert about yesterday morning would only confuse people.
     where p_now >= dy.window_closed_at
       and p_now < dy.window_closed_at + interval '12 hours'
-      -- Nothing for a day that ended before the parent joined. Joining again
-      -- from a new phone counts as hearing from her that day.
+      -- Nothing for a day that ended before the parent joined.
       and exists (select 1 from parents p
                   where p.family_id = dy.family_id and p.created_at < dy.window_closed_at)
       and not exists (
@@ -103,7 +105,7 @@ as $$
 $$;
 
 -- The job pg_cron runs. The heartbeat is written in the same transaction, so
--- a failing run leaves the heartbeat stale and the uptime check notices.
+-- a failing run leaves the heartbeat stale.
 create or replace function public.run_escalation()
 returns void
 language sql
