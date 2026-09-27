@@ -14,8 +14,8 @@
 -- most once per family per local day, however often the job runs.
 --
 -- Escalation stops as soon as the parent checks in, or someone acknowledges
--- any of that day's alerts. If the job was down, due steps are caught up, in
--- up to 12 hours after the window closed. Families in away mode
+-- any of that day's alerts. If the job was down, due steps are caught up
+-- for up to 12 hours after the window closed. Families in away mode
 -- are skipped through the day they're back (schedules.paused_until). Days
 -- are the family's own local days, so time zones and daylight saving follow
 -- schedules.time_zone.
