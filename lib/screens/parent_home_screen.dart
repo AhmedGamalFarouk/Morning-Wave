@@ -8,6 +8,7 @@ import '../theme/palette.dart';
 import '../widgets/morning_sun.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/whole_words_text.dart';
 
 enum ParentMorning { ready, sent, away }
 
@@ -52,7 +53,9 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   @override
   void initState() {
     super.initState();
-    widget.notificationsEnabled?.call().then((enabled) {
+    widget.notificationsEnabled?.call().catchError((Object _) => false).then((
+      enabled,
+    ) {
       if (enabled && mounted) setState(() => _notesAsked = true);
     });
   }
@@ -146,7 +149,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                   : Center(
                       child: TextButton(
                         onPressed: () => _set(ParentMorning.ready),
-                        child: const Text('Oops, not yet'),
+                        child: const WholeWordsText('Oops, not yet'),
                       ),
                     ),
             ),
@@ -180,7 +183,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               Center(
                 child: TextButton(
                   onPressed: _askAboutAway,
-                  child: const Text('Going somewhere?'),
+                  child: const WholeWordsText('Going somewhere?'),
                 ),
               ),
             ],
@@ -207,7 +210,11 @@ class _Greeting extends StatelessWidget {
       child: Column(
         key: ValueKey('$title$line'),
         children: [
-          Text(title, textAlign: TextAlign.center, style: text.displayMedium),
+          WholeWordsText(
+            title,
+            textAlign: TextAlign.center,
+            style: text.displayMedium,
+          ),
           const SizedBox(height: 10),
           Text(
             line,
@@ -244,7 +251,10 @@ class _FamilyNote extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Text('“${PlaceholderFamily.note}”', style: text.headlineSmall),
+          WholeWordsText(
+            '“${PlaceholderFamily.note}”',
+            style: text.headlineSmall,
+          ),
           const SizedBox(height: 10),
           Text(
             PlaceholderFamily.childName,
@@ -270,7 +280,10 @@ class _NotesInvitation extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('So your family’s love reaches you', style: text.headlineSmall),
+          WholeWordsText(
+            'So your family’s love reaches you',
+            style: text.headlineSmall,
+          ),
           const SizedBox(height: 8),
           Text(
             'Let Morning Wave bring you their notes when they send one.',
@@ -279,11 +292,11 @@ class _NotesInvitation extends StatelessWidget {
           const SizedBox(height: 20),
           FilledButton(
             onPressed: () => onAnswer(allow: true),
-            child: const Text('Yes, bring me notes'),
+            child: const WholeWordsText('Yes, bring me notes'),
           ),
           TextButton(
             onPressed: () => onAnswer(allow: false),
-            child: const Text('Maybe later'),
+            child: const WholeWordsText('Maybe later'),
           ),
         ],
       ),
@@ -405,7 +418,7 @@ class _AwaySheetState extends State<_AwaySheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Going somewhere?', style: text.headlineMedium),
+            WholeWordsText('Going somewhere?', style: text.headlineMedium),
             const SizedBox(height: 12),
             Text(
               'When will you be back? Your family won’t expect a good '
@@ -434,13 +447,17 @@ class _AwaySheetState extends State<_AwaySheet> {
             ),
             const SizedBox(height: 28),
             FilledButton(
+              // The sheet's one action, at primary-action size.
+              style: FilledButton.styleFrom(
+                textStyle: text.labelLarge?.copyWith(fontSize: 28),
+              ),
               onPressed: () => Navigator.pop(context, _backOn),
-              child: const Text('Let my family know'),
+              child: const WholeWordsText('Let my family know'),
             ),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Not now'),
+              child: const WholeWordsText('Not now'),
             ),
           ],
         ),

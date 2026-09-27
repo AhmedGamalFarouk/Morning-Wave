@@ -50,6 +50,8 @@ emoji, so they look the same on every phone.
 - For 10 seconds after the tap, "Oops, not yet" sits under the sun.
 - The sun's words shrink to fit at very large system text sizes; lines only
   break where the label says.
+- Titles and button labels (`WholeWordsText`) grow with system text up to
+  1.5x and never split a word; a test checks every screen at 320dp and 2x.
 - Words change by fading the old line out before the new one arrives.
 - System "Remove animations" stops the breathing and skips the swell.
 

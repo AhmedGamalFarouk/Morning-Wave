@@ -4,6 +4,7 @@ import '../placeholder/family.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/whole_words_text.dart';
 
 /// The child's home answers one question before anything else:
 /// "How is Mom?"
@@ -57,6 +58,7 @@ class _ParentHeroState extends State<_ParentHero> {
     );
   }
 
+  // TODO(before closed test): open the phone dialer with Mom's number.
   void _call() {
     ScaffoldMessenger.of(
       context,
@@ -106,7 +108,7 @@ class _ParentHeroState extends State<_ParentHero> {
           const SizedBox(height: 16),
           Semantics(
             header: true,
-            child: Text(title, style: text.displayMedium),
+            child: WholeWordsText(title, style: text.displayMedium),
           ),
           const SizedBox(height: 10),
           Text(line, style: text.bodyLarge?.copyWith(color: Palette.inkSoft)),
@@ -115,12 +117,15 @@ class _ParentHeroState extends State<_ParentHero> {
             FilledButton.icon(
               onPressed: _loveSent ? null : _sendLove,
               icon: const HeartMark(color: Palette.peach),
-              label: Text(_loveSent ? 'Love sent' : 'Send love'),
+              label: WholeWordsText(_loveSent ? 'Love sent' : 'Send love'),
             ),
           ],
           if (widget.view == ChildView.waiting) ...[
             const SizedBox(height: 28),
-            FilledButton(onPressed: _call, child: const Text('Call $parent')),
+            FilledButton(
+              onPressed: _call,
+              child: const WholeWordsText('Call $parent'),
+            ),
           ],
         ],
       ),
