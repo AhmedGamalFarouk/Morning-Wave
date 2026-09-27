@@ -26,8 +26,13 @@ Deno.serve(async (req) => {
   const db = postgrest(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
   const counts = await deliverPending({
     claim: () => db.rpc("claim_alerts", {}),
-    finish: (id, error, permanent) =>
-      db.rpc("finish_alert", { p_id: id, p_error: error, p_permanent: permanent }),
+    finish: (id, error, permanent, deadToken) =>
+      db.rpc("finish_alert", {
+        p_id: id,
+        p_error: error,
+        p_permanent: permanent,
+        p_dead_token: deadToken ?? null,
+      }),
     push: (p) => (push ??= fcmSender(JSON.parse(env("FCM_SERVICE_ACCOUNT"))))(p),
     email: (e) => (email ??= brevoSender(env("BREVO_API_KEY"), env("ALERT_EMAIL_FROM")))(e),
   });

@@ -5,13 +5,13 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(32);
+select plan(39);
 
 -- Keep cases apart: start from no alerts.
 delete from public.alerts;
 
 create temp table fam as select gen_random_uuid() as id;
-insert into public.families (id, name) select id, 'test' from fam;
+insert into public.families (id, name, parent_name) select id, 'test', 'Mom' from fam;
 insert into public.members (family_id, role, display_name, email, fcm_token, created_at)
 select id, v.role, v.name, v.email, v.token, v.at from fam, (values
   ('parent', 'Mom', 'mom@x.test', 'tok-mom', '2026-01-01Z'::timestamptz),
@@ -60,32 +60,56 @@ select is((select sent_at from public.alerts where id = a2.id), (select sent_at 
           'finishing a sent alert again changes nothing') from a2;
 select is((select last_error from public.alerts where id = a2.id), null, 'no error recorded on a sent alert') from a2;
 
--- 4. Temporary error: released and retried.
+-- 4. Temporary error: released, retried after a growing wait.
 create temp table a3 as select pg_temp.alert('2026-10-05', 3, 'push', 'Ana') as id;
 select pg_temp.claim();
 select public.finish_alert(id, 'fcm 503', false) from a3;
 select is((select row(claimed_at, failed_at, last_error)::text from public.alerts where id = a3.id),
           row(null::timestamptz, null::timestamptz, 'fcm 503')::text, 'released with the error kept') from a3;
-select is(jsonb_array_length(pg_temp.claim()), 1, 'retried on the next run');
-select is((select attempts from public.alerts where id = a3.id), 2, 'second attempt counted') from a3;
+select is((select retry_after - now() from public.alerts where id = a3.id), interval '1 minute',
+          'first retry after a minute') from a3;
+select is(pg_temp.claim(), '[]'::jsonb, 'not retried before then');
+update public.alerts set retry_after = now() where id = (select id from a3);
+select is(jsonb_array_length(pg_temp.claim()), 1, 'retried once the wait is over');
+select public.finish_alert(id, 'fcm 503', false) from a3;
+select is((select retry_after - now() from public.alerts where id = a3.id), interval '2 minutes',
+          'second wait doubles') from a3;
 
 -- 5. A lease left by a call that died is picked up after 2 minutes.
-update public.alerts set claimed_at = now() - interval '90 seconds' where id = (select id from a3);
+update public.alerts set retry_after = null, claimed_at = now() - interval '90 seconds' where id = (select id from a3);
 select is(pg_temp.claim(), '[]'::jsonb, 'fresh lease kept');
 update public.alerts set claimed_at = now() - interval '3 minutes' where id = (select id from a3);
 select is(jsonb_array_length(pg_temp.claim()), 1, 'stale lease reclaimed');
 
--- 6. After 10 attempts it stops.
-update public.alerts set attempts = 10 where id = (select id from a3);
-select public.finish_alert(id, 'fcm 503', false) from a3;
-select isnt((select failed_at from public.alerts where id = a3.id), null, 'gives up after 10 attempts') from a3;
-select is(pg_temp.claim(), '[]'::jsonb, 'failed alert not claimed again');
+-- 6. Ten quick temporary failures don't give up: an outage of a few minutes
+--    still ends in delivery. The wait stops growing at 30 minutes.
+create function pg_temp.fail_again(p bigint) returns void language sql as $$
+  update public.alerts set retry_after = null, claimed_at = null where id = p;
+  select public.claim_alerts();
+  select public.finish_alert(p, 'fcm 503', false);
+$$;
+select pg_temp.fail_again(id) from a3, generate_series(1, 10);
+select is((select failed_at from public.alerts where id = a3.id), null, 'still waiting after 10 more failures') from a3;
+select is((select retry_after - now() from public.alerts where id = a3.id), interval '30 minutes',
+          'wait capped at 30 minutes') from a3;
+update public.alerts set retry_after = now() where id = (select id from a3);
+select is(jsonb_array_length(pg_temp.claim()), 1, 'claimable again after the wait');
 
 -- 7. Permanent error stops at once.
 create temp table a1 as select pg_temp.alert('2026-10-05', 1, 'push', 'Mom') as id;
 select pg_temp.claim();
 select public.finish_alert(id, 'no_token', true) from a1;
 select isnt((select failed_at from public.alerts where id = a1.id), null, 'permanent error stops retries') from a1;
+select is((select retry_after from public.alerts where id = a1.id), null, 'no retry planned') from a1;
+
+-- 7b. A token FCM says is gone is cleared, but only if it hasn't changed since.
+create temp table a1b as select pg_temp.alert('2026-10-04', 2, 'urgent_push', 'Ana') as id;
+select pg_temp.claim();
+select public.finish_alert(id, 'fcm 404', true, 'tok-old') from a1b;
+select is((select fcm_token from public.members where display_name = 'Ana'), 'tok-ana', 'renewed token kept');
+select public.finish_alert(id, 'fcm 404', true, 'tok-ana') from a1b;
+select is((select fcm_token from public.members where display_name = 'Ana'), null, 'dead token cleared');
+update public.members set fcm_token = 'tok-ana' where display_name = 'Ana';
 
 -- 8. Email goes to children with an address, never to the parent.
 create temp table a4 as select pg_temp.alert('2026-10-05', 4, 'email', null) as id;
@@ -111,9 +135,10 @@ create temp table a7 as select pg_temp.alert('2026-10-07', 3, 'push', 'Ana') as 
 select is((pg_temp.claim()->0->>'checked_in')::boolean, true, 'acknowledged day sends nothing more');
 
 -- 11. The parent's name falls back when unset.
-update public.members set display_name = null where role = 'parent';
+update public.families set parent_name = null;
 create temp table a8 as select pg_temp.alert('2026-10-08', 2, 'urgent_push', 'Sam') as id;
 select is(pg_temp.claim()->0->>'parent_name', 'your parent', 'fallback parent name');
+update public.families set parent_name = 'Mom';
 
 -- 12. An alert left unsent for 12 hours is let go, not sent late.
 delete from public.alerts;
@@ -130,6 +155,13 @@ delete from vault.secrets where name in ('project_url', 'alerts_webhook_secret')
 select private.kick_alert_sender();
 select is((select count(*)::int from net.http_request_queue), 0, 'no call when nothing is waiting');
 create temp table a9 as select pg_temp.alert('2026-10-09', 2, 'urgent_push', 'Sam') as id;
+update public.alerts set retry_after = now() + interval '1 minute' where id = (select id from a9);
+select vault.create_secret('https://ref.supabase.co', 'project_url');
+select vault.create_secret('s3cret', 'alerts_webhook_secret');
+select private.kick_alert_sender();
+select is((select count(*)::int from net.http_request_queue), 0, 'no call while the only alert is waiting to retry');
+update public.alerts set retry_after = null where id = (select id from a9);
+delete from vault.secrets;
 select private.kick_alert_sender();
 select is((select count(*)::int from net.http_request_queue), 0, 'no call without the Vault secrets');
 select vault.create_secret('https://ref.supabase.co', 'project_url');
@@ -141,7 +173,7 @@ select is((select url || ' ' || (headers->>'x-alerts-secret') from net.http_requ
 -- 14. Only the server can claim or finish alerts.
 select ok(not has_function_privilege('authenticated', 'public.claim_alerts(integer)', 'execute')
           and not has_function_privilege('anon', 'public.claim_alerts(integer)', 'execute')
-          and not has_function_privilege('authenticated', 'public.finish_alert(bigint, text, boolean)', 'execute'),
+          and not has_function_privilege('authenticated', 'public.finish_alert(bigint, text, boolean, text)', 'execute'),
           'API roles cannot claim or finish alerts');
 
 select * from finish();

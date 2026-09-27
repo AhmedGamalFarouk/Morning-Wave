@@ -59,7 +59,8 @@ export function fcmSender(account: ServiceAccount, fetchFn: Fetch = fetch) {
     // A token that's gone (app removed, data cleared) won't come back by retrying.
     const permanent = res.status === 404 || text.includes("UNREGISTERED") ||
       (res.status === 400 && text.includes("registration token"));
-    return { ok: false, permanent, error: `fcm ${res.status}: ${text.slice(0, 300)}` };
+    const error = `fcm ${res.status}: ${text.slice(0, 300)}`;
+    return permanent ? { ok: false, permanent, error, deadToken: p.token } : { ok: false, permanent, error };
   };
 }
 

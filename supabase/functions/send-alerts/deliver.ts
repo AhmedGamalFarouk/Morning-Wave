@@ -16,7 +16,7 @@ export interface Alert {
 
 export type SendResult =
   | { ok: true }
-  | { ok: false; permanent: boolean; error: string };
+  | { ok: false; permanent: boolean; error: string; deadToken?: string };
 
 export interface Push {
   token: string;
@@ -35,8 +35,8 @@ export interface Email {
 
 export interface Deps {
   claim(): Promise<Alert[]>;
-  /** error null = sent. permanent = don't retry. */
-  finish(id: Alert["id"], error: string | null, permanent: boolean): Promise<void>;
+  /** error null = sent. permanent = don't retry. deadToken = clear it from the member. */
+  finish(id: Alert["id"], error: string | null, permanent: boolean, deadToken?: string): Promise<void>;
   push(p: Push): Promise<SendResult>;
   /** One call per alert, so a retry can't half-repeat it. */
   email(e: Email): Promise<SendResult>;
@@ -52,7 +52,8 @@ export async function deliverPending(deps: Deps) {
     if (result.ok) counts.sent++;
     else if (result.error === "checked_in") counts.skipped++;
     else counts.failed++;
-    await deps.finish(alert.id, result.ok ? null : result.error, !result.ok && result.permanent);
+    if (result.ok) await deps.finish(alert.id, null, false);
+    else await deps.finish(alert.id, result.error, result.permanent, result.deadToken);
   }
   return counts;
 }

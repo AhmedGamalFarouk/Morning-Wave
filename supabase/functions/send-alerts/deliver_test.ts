@@ -16,16 +16,18 @@ const base: Alert = {
 function fakeDeps(alerts: Alert[], results: { push?: SendResult; email?: SendResult } = {}) {
   const pushes: Push[] = [], emails: Email[] = [];
   const finished: [Alert["id"], string | null, boolean][] = [];
+  const deadTokens: (string | undefined)[] = [];
   const deps: Deps = {
     claim: () => Promise.resolve(alerts),
-    finish: (id, error, permanent) => {
+    finish: (id, error, permanent, deadToken) => {
       finished.push([id, error, permanent]);
+      deadTokens.push(deadToken);
       return Promise.resolve();
     },
     push: (p) => (pushes.push(p), Promise.resolve(results.push ?? { ok: true })),
     email: (e) => (emails.push(e), Promise.resolve(results.email ?? { ok: true })),
   };
-  return { deps, pushes, emails, finished };
+  return { deps, pushes, emails, finished, deadTokens };
 }
 
 Deno.test("urgent push to the child, then marked sent", async () => {
@@ -61,6 +63,13 @@ Deno.test("a temporary FCM error is released for retry", async () => {
   const f = fakeDeps([base], { push: { ok: false, permanent: false, error: "fcm 503" } });
   assert.deepEqual(await deliverPending(f.deps), { sent: 0, failed: 1, skipped: 0 });
   assert.deepEqual(f.finished, [[1, "fcm 503", false]]);
+});
+
+Deno.test("a token FCM says is gone is passed back to be cleared", async () => {
+  const f = fakeDeps([base], { push: { ok: false, permanent: true, error: "fcm 404", deadToken: "tok" } });
+  await deliverPending(f.deps);
+  assert.deepEqual(f.finished, [[1, "fcm 404", true]]);
+  assert.deepEqual(f.deadTokens, ["tok"]);
 });
 
 Deno.test("a thrown error still finishes the row and moves on to the next", async () => {

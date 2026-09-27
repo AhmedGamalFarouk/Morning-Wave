@@ -19,9 +19,20 @@ export function brevoSender(apiKey: string, from: string, fetchFn: typeof fetch 
     });
     if (res.ok) return { ok: true };
     const text = await res.text();
-    // A 400 means this email itself is wrong (a bad address). Anything else,
-    // like a bad key or rate limiting, can be fixed, so it's retried.
-    const permanent = res.status === 400;
+    // Only a bad recipient address is hopeless. Setup mistakes (an unverified
+    // sender, a bad key) and rate limits can be fixed, so they're retried
+    // until the 12-hour cutoff.
+    const permanent = res.status === 400 && isBadRecipient(text);
     return { ok: false, permanent, error: `brevo ${res.status}: ${text.slice(0, 300)}` };
   };
+}
+
+function isBadRecipient(body: string): boolean {
+  try {
+    const { code, message } = JSON.parse(body);
+    return code === "invalid_parameter" && /email|recipient|\bto\b/i.test(message) &&
+      !/sender/i.test(message);
+  } catch {
+    return false;
+  }
 }

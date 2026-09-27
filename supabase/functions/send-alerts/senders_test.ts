@@ -81,11 +81,13 @@ Deno.test("fcm: an unregistered token is permanent, a 503 is retried", async () 
   );
   const gone = await fcmSender(account, m.fn)(push);
   assert.equal(!gone.ok && gone.permanent, true);
+  assert.equal(!gone.ok && gone.deadToken, "tok");
   const m2 = mockFetch((url) =>
     url.includes("oauth2") ? tokenOk() : new Response("unavailable", { status: 503 })
   );
   const retry = await fcmSender(account, m2.fn)(push);
   assert.equal(!retry.ok && retry.permanent, false);
+  assert.equal(!retry.ok && retry.deadToken, undefined);
 });
 
 Deno.test("fcm: a failed Google token exchange throws, so the alert is retried", async () => {
@@ -114,11 +116,20 @@ Deno.test("brevo: one request, one version per recipient", async () => {
   ]);
 });
 
-Deno.test("brevo: a bad address is permanent, a bad key or rate limit is retried", async () => {
-  for (const [status, permanent] of [[400, true], [401, false], [429, false], [500, false]] as const) {
-    const m = mockFetch(() => new Response("{}", { status }));
+Deno.test("brevo: only a bad recipient address is permanent", async () => {
+  const bad = (message: string) => JSON.stringify({ code: "invalid_parameter", message });
+  const cases: [number, string, boolean][] = [
+    [400, bad("email is not valid in to"), true],
+    [400, bad("sender is not valid"), false],
+    [400, "not json", false],
+    [401, JSON.stringify({ code: "unauthorized", message: "Key not found" }), false],
+    [429, "{}", false],
+    [500, "{}", false],
+  ];
+  for (const [status, body, permanent] of cases) {
+    const m = mockFetch(() => new Response(body, { status }));
     const res = await brevoSender("key", "hello@mw.test", m.fn)(email);
-    assert.equal(!res.ok && res.permanent, permanent, `status ${status}`);
+    assert.equal(!res.ok && res.permanent, permanent, `${status} ${body}`);
   }
 });
 
