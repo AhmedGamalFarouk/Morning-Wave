@@ -54,9 +54,18 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
-// Firebase config is not committed (see README). Without it the app still
-// builds and runs; push and Crashlytics are simply disabled.
+// Firebase config is not committed (see README). Without it debug builds
+// still run with push and Crashlytics off, but a release build fails so it
+// can never ship without crash reporting.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
     apply(plugin = "com.google.firebase.crashlytics")
+} else {
+    tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+        doFirst {
+            throw GradleException(
+                "android/app/google-services.json is missing. Release builds need Firebase; see README.",
+            )
+        }
+    }
 }
