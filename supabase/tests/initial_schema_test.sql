@@ -80,11 +80,10 @@ select pg_temp.act_as('b');
 select is((select count(*) from public.families), 1::bigint, 'B sees only their own family');
 select is((select count(*) from public.members), 1::bigint, 'B sees only their own members');
 select is((select count(*) from public.checkins), 0::bigint, 'B cannot see A''s check-ins');
-select is(
-  (with u as (update public.schedules set window_end = '11:00'
-              where family_id = (select family_id from ids where who = 'a') returning 1)
-   select count(*) from u),
-  0::bigint, 'B cannot change A''s schedule');
+select is_empty(
+  $$ update public.schedules set window_end = '11:00'
+     where family_id = (select family_id from ids where who = 'a') returning 1 $$,
+  'B cannot change A''s schedule');
 select throws_ok($$ update public.members set role = 'parent' $$,
                  '42501', null, 'role is not client-editable');
 select throws_ok($$ select public.reinvite_parent((select family_id from ids where who = 'a')) $$,
