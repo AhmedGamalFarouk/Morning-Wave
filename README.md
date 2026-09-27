@@ -45,6 +45,9 @@ crash reporting can't ship by accident.
   settings as "Family messages" (max importance). Server pushes for missed
   check-ins should set `android.notification.channel_id` to `urgent`. Pushes
   that arrive while the app is open are shown through this channel too.
+- A `gentle` channel, "Good morning notes" (normal importance), for the
+  parent's nudge and other everyday messages. Foreground pushes that name no
+  known channel use it.
 - Android 13+ notification permission is requested on the home screen.
 - The launch screen uses the cream paper colour, so there is no white flash.
 
