@@ -262,7 +262,8 @@ class _ParentHeroState extends State<_ParentHero> {
         0.45,
         Palette.paperDeep,
         '$parent is away',
-        'Back on ${PlaceholderFamily.awayUntil}. No morning hellos until then.',
+        'Back on ${PlaceholderFamily.awayUntil}. Morning hellos start again '
+            'the day after.',
       ),
     };
 
