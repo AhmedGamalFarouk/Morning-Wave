@@ -114,13 +114,14 @@ class _AppGateState extends State<AppGate> {
   }
 
   Future<String?> _join(String code) async {
+    final before = _families?.length ?? 0;
     try {
       await _auth.signInAsParent();
       await widget.families.joinFamily(code, myName: _myName);
     } on UnknownInviteCode {
       // A retry after a lost answer also lands here: the first try may
       // have joined already.
-      if (await _joinedSince(0)) return null;
+      if (await _joinedSince(before)) return null;
       return 'That code isn’t one we know yet. Check it with your family '
           'and try once more.';
     } on TooManyCodes {

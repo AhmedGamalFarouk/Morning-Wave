@@ -285,7 +285,10 @@ void main() {
 
     expect(find.text('Mom is all set'), findsOneWidget);
     expect(find.text('Mom said good morning'), findsNothing);
-    expect(find.textContaining('HN4R T8WE'), findsOneWidget);
+    expect(find.textContaining('HN4R T8WE'), findsNothing);
+
+    await _tap(tester, 'Invite a brother or sister');
+    expect(find.text('HN4R T8WE'), findsOneWidget);
   });
 
   testWidgets('out of reach never leads a child to a second family', (
@@ -302,6 +305,20 @@ void main() {
     families.reachable = true;
     await _tap(tester, 'Try again');
     expect(find.text('Start our mornings'), findsOneWidget);
+  });
+
+  testWidgets('a wrong code from a child with a family says so', (
+    tester,
+  ) async {
+    final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
+    final families = _FakeFamilies()..mine = [_family('Mom')];
+    await tester.pumpWidget(_app(auth, families));
+    await _settle(tester);
+
+    await _tap(tester, 'Add a parent who lives apart');
+    await _tap(tester, 'I have a code from my family');
+    await _typeCode(tester, 'AAAA AAAA');
+    expect(find.textContaining('Check it with your family'), findsOneWidget);
   });
 
   testWidgets('a child can look after two parents who live apart', (

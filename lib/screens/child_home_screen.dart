@@ -65,7 +65,9 @@ class ChildHomeScreen extends StatelessWidget {
         ),
         for (final parent in parents) ...[
           const SizedBox(height: 18),
-          if (parent.joined)
+          // A family whose parent code was used up without a parent row
+          // falls back to the hero, whose "New phone" makes a fresh one.
+          if (parent.joined || parent.parentCode == null)
             _ParentHero(view: view, parent: parent)
           else
             _InviteCard(code: parent.parentCode!, parent: parent.name),
@@ -198,6 +200,37 @@ class _ParentHeroState extends State<_ParentHero> {
     );
   }
 
+  /// Kept off the card so nobody reads the parent this code by mistake.
+  void _showChildCode(String code) {
+    final text = Theme.of(context).textTheme;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Palette.paper,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('For brothers and sisters', style: text.headlineMedium),
+              const SizedBox(height: 10),
+              Text(
+                'They sign in with Google, tap “I have a code from my family” '
+                'and type this. It’s not for ${widget.parent.name}’s phone.',
+                style: text.bodyLarge?.copyWith(color: Palette.inkSoft),
+              ),
+              const SizedBox(height: 20),
+              _CodeBlock(code: code),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// The old phone stops once the new one joins, so ask first.
   Future<void> _confirmNewPhone() async {
     final parent = widget.parent.name;
@@ -313,14 +346,11 @@ class _ParentHeroState extends State<_ParentHero> {
               child: Text('New phone for $parent?'),
             ),
           ],
-          if (childCode != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Brothers and sisters can join with '
-              '${displayInviteCode(childCode)}.',
-              style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
+          if (childCode != null)
+            TextButton(
+              onPressed: () => _showChildCode(childCode),
+              child: const Text('Invite a brother or sister'),
             ),
-          ],
         ],
       ),
     );

@@ -53,6 +53,9 @@ class SupabaseAuth implements Auth {
 
   @override
   Future<bool> signInWithGoogle() async {
+    if (AppConfig.googleWebClientId.isEmpty) {
+      throw StateError('GOOGLE_WEB_CLIENT_ID is missing from config/dev.json.');
+    }
     final google = GoogleSignIn.instance;
     // Supabase checks the ID token against the web client ID.
     try {
