@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/app_config.dart';
 import 'screens/home_screen.dart';
 import 'services/notifications.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,11 +56,12 @@ class MorningWaveApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Morning Wave',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
-      ),
-      home: const HomeScreen(
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
+      home: HomeScreen(
         requestNotificationPermission: Notifications.requestPermission,
+        notificationsEnabled: Notifications.areEnabled,
+        preview: parseHomePreview(AppConfig.preview),
       ),
     );
   }

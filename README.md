@@ -14,6 +14,16 @@ That works on a fresh clone: Supabase, push and crash reporting stay off and
 a line in the debug log says so. Once `config/dev.json` exists (below), run
 `flutter run --dart-define-from-file=config/dev.json` to connect Supabase.
 
+To preview the child's home instead of the parent's, add
+`--dart-define=PREVIEW=child` (or `child-waiting`, `child-away`). Screens use
+placeholder data from `lib/placeholder/family.dart` until the backend is wired.
+
+## Design
+
+`docs/design-language.md` is the emotional design language every screen
+follows. `DESIGN.md` records the palette, type, surfaces and motion that
+implement it, and `PRODUCT.md` the product facts design work relies on.
+
 ## Config you fill in (never committed)
 
 | File | What goes in it | Where to get it |

@@ -7,6 +7,9 @@ class AppConfig {
     'SUPABASE_PUBLISHABLE_KEY',
   );
 
+  /// Which home screen to preview; see HomeScreen.
+  static const preview = String.fromEnvironment('PREVIEW');
+
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 }
