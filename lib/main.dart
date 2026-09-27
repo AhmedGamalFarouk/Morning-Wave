@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/app_config.dart';
+import 'family/auth.dart';
+import 'family/family_repository.dart';
+import 'screens/app_gate.dart';
 import 'screens/home_screen.dart';
 import 'services/notifications.dart';
 import 'theme/app_theme.dart';
@@ -58,11 +61,19 @@ class MorningWaveApp extends StatelessWidget {
       title: 'Morning Wave',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: HomeScreen(
-        requestNotificationPermission: Notifications.requestPermission,
-        notificationsEnabled: Notifications.areEnabled,
-        preview: parseHomePreview(AppConfig.preview),
-      ),
+      // Without Supabase config, a debug build previews the home screens.
+      home: AppConfig.hasSupabase
+          ? AppGate(
+              auth: SupabaseAuth(Supabase.instance.client.auth),
+              families: SupabaseFamilyRepository(Supabase.instance.client),
+              requestNotificationPermission: Notifications.requestPermission,
+              notificationsEnabled: Notifications.areEnabled,
+            )
+          : HomeScreen(
+              requestNotificationPermission: Notifications.requestPermission,
+              notificationsEnabled: Notifications.areEnabled,
+              preview: parseHomePreview(AppConfig.preview),
+            ),
     );
   }
 }

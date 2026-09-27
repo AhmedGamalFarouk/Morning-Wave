@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../placeholder/family.dart';
 import '../theme/palette.dart';
@@ -8,38 +9,134 @@ import '../widgets/sun_painter.dart';
 /// The child's home answers one question before anything else:
 /// "How is Mom?"
 class ChildHomeScreen extends StatelessWidget {
-  const ChildHomeScreen({super.key, this.view = ChildView.heard});
+  const ChildHomeScreen({
+    super.key,
+    this.view = ChildView.heard,
+    this.parentName = PlaceholderFamily.parentName,
+    this.childName = PlaceholderFamily.childName,
+    this.inviteCode,
+    this.onRefresh,
+  });
 
   final ChildView view;
+  final String parentName;
+  final String? childName;
+
+  /// Set until the parent's phone has joined; the invite then leads.
+  final String? inviteCode;
+
+  /// Pull down to look again, for example once the parent has joined.
+  final Future<void> Function()? onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final list = ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            childName == null ? 'Good morning' : 'Morning, $childName',
+            style: text.titleLarge?.copyWith(color: Palette.inkSoft),
+          ),
+        ),
+        const SizedBox(height: 18),
+        if (inviteCode == null)
+          _ParentHero(view: view, parent: parentName)
+        else
+          _InviteCard(code: inviteCode!, parent: parentName),
+      ],
+    );
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                'Morning, ${PlaceholderFamily.childName}',
-                style: text.titleLarge?.copyWith(color: Palette.inkSoft),
+        child: onRefresh == null
+            ? list
+            : RefreshIndicator(
+                onRefresh: onRefresh!,
+                color: Palette.sunEdge,
+                child: list,
+              ),
+      ),
+    );
+  }
+}
+
+/// Before the parent's phone joins, the child's whole job is this code.
+class _InviteCard extends StatelessWidget {
+  const _InviteCard({required this.code, required this.parent});
+
+  final String code;
+  final String parent;
+
+  void _copy(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Code copied')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return PaperCard(
+      padding: const EdgeInsets.all(28),
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Palette.glow, Palette.card],
+        stops: [0, 0.7],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SunMark(size: 80, warmth: 0.8),
+          const SizedBox(height: 16),
+          Semantics(
+            header: true,
+            child: Text('Now, $parent’s phone', style: text.displayMedium),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Install Morning Wave on $parent’s phone, tap “I have a code” '
+            'and type:',
+            style: text.bodyLarge?.copyWith(color: Palette.inkSoft),
+          ),
+          const SizedBox(height: 20),
+          Center(
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.4,
+              child: SelectableText(
+                code,
+                semanticsLabel: 'Family code ${code.split('').join(' ')}',
+                style: text.displayMedium?.copyWith(
+                  fontSize: 44,
+                  letterSpacing: 8,
+                ),
               ),
             ),
-            const SizedBox(height: 18),
-            _ParentHero(view: view),
-          ],
-        ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => _copy(context),
+            child: const Text('Copy the code'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'You’ll see $parent’s good mornings right here.',
+            style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _ParentHero extends StatefulWidget {
-  const _ParentHero({required this.view});
+  const _ParentHero({required this.view, required this.parent});
 
   final ChildView view;
+  final String parent;
 
   @override
   State<_ParentHero> createState() => _ParentHeroState();
@@ -51,9 +148,7 @@ class _ParentHeroState extends State<_ParentHero> {
   void _sendLove() {
     setState(() => _loveSent = true);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('${PlaceholderFamily.parentName} will see your love.'),
-      ),
+      SnackBar(content: Text('${widget.parent} will see your love.')),
     );
   }
 
@@ -66,7 +161,7 @@ class _ParentHeroState extends State<_ParentHero> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    const parent = PlaceholderFamily.parentName;
+    final parent = widget.parent;
 
     final (warmth, top, title, line) = switch (widget.view) {
       ChildView.heard => (
@@ -119,7 +214,7 @@ class _ParentHeroState extends State<_ParentHero> {
           ],
           if (widget.view == ChildView.waiting) ...[
             const SizedBox(height: 28),
-            FilledButton(onPressed: _call, child: const Text('Call $parent')),
+            FilledButton(onPressed: _call, child: Text('Call $parent')),
           ],
         ],
       ),
