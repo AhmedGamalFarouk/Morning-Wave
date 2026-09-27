@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(35);
+select plan(40);
 
 -- A family with a parent who joined long ago, n children and a schedule.
 create function pg_temp.member(f uuid, role text, joined timestamptz) returns uuid
@@ -182,7 +182,43 @@ select is((select m.user_id from public.alerts a join public.members m on m.id =
           '00000000-0000-0000-0000-0000000000aa'::uuid, 'new phone: the nudge goes to her new account');
 drop table fam;
 
--- 13. After an outage, due steps catch up in order, but only for 12 hours.
+--     Re-joining from a new phone after an earlier tap that day: her tap
+--     still counts, so nothing is sent.
+create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
+select pg_temp.only(id) from fam;
+select pg_temp.checkin(id, '2026-10-05 12:00Z') from fam;
+insert into auth.users (id) values ('00000000-0000-0000-0000-0000000000bb');
+update public.members set user_id = '00000000-0000-0000-0000-0000000000bb', fcm_token = null
+where family_id = (select id from fam) and role = 'parent';
+select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'new phone after a tap that day: nothing sent');
+drop table fam;
+
+-- 13. Only the parent's own check-in stops the escalation.
+create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
+select pg_temp.only(id) from fam;
+insert into public.checkins (family_id, member_id, source, created_at)
+select id, (select m.id from public.members m where m.family_id = fam.id and m.role = 'child' limit 1),
+       'tap', '2026-10-05 12:00Z' from fam;
+select is(pg_temp.run('2026-10-05 13:15Z'), 1, 'a child''s check-in doesn''t count as hers');
+drop table fam;
+
+-- 14. A tap just after local midnight answers a late-evening window.
+create temp table fam as select pg_temp.family('America/New_York', '23:50') as id;
+select pg_temp.only(id) from fam;
+select is(pg_temp.run('2026-10-06 04:05Z'), 1, 'late window: nudge at 00:05');
+select pg_temp.checkin(id, '2026-10-06 04:10Z') from fam;
+select is(pg_temp.run('2026-10-06 04:35Z'), 0, 'late window: tap at 00:10 stops the rest');
+drop table fam;
+
+-- 15. A family with an unknown time zone is skipped, and the others still run.
+alter table public.schedules drop constraint schedules_time_zone_check;
+create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
+create temp table bad as select pg_temp.family('Mars/Olympus_Mons', '09:00') as id;
+delete from public.schedules where family_id not in (select id from fam union select id from bad);
+select is(pg_temp.run('2026-10-05 13:15Z'), 1, 'unknown zone: skipped, the healthy family still escalates');
+drop table fam; drop table bad;
+
+-- 16. After an outage, due steps catch up in order, but only for 12 hours.
 create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
 select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 13:50Z'), 4, 'outage: all due steps at once');
@@ -193,7 +229,7 @@ select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-06 01:30Z'), 0, 'outage over 12 hours: that morning is let go');
 drop table fam;
 
--- 14. The job itself: heartbeat written, scheduled every minute.
+-- 17. The job itself: heartbeat written, scheduled every minute.
 select public.run_escalation();
 select ok((select last_run_at = now() from public.heartbeats where job = 'escalation'),
           'run_escalation writes the heartbeat');

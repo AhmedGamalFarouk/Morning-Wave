@@ -8,7 +8,7 @@
 --   step 1  window end + 15 min  push         to the parent (a gentle nudge)
 --   step 2  window end + 30 min  urgent push  to the first child
 --   step 3  window end + 45 min  push         to the second child, if there is one
---   step 4  window end + 45 min  email        to everyone (recipient null)
+--   step 4  window end + 45 min  email        to the children (recipient null)
 --
 -- The unique (family_id, day, step) rule on alerts makes each step fire at
 -- most once per family per local day, however often the job runs.
@@ -16,8 +16,8 @@
 -- Escalation stops as soon as the parent checks in, or someone acknowledges
 -- any of that day's alerts. If the job was down, due steps are caught up, in
 -- order, for up to 12 hours after the window closed. Families in away mode
--- are skipped through the day they're back (schedules.paused_until). Days are the
--- family's own local days, so time zones and daylight saving follow
+-- are skipped through the day they're back (schedules.paused_until). Days
+-- are the family's own local days, so time zones and daylight saving follow
 -- schedules.time_zone.
 
 create extension if not exists pg_cron with schema pg_catalog;
@@ -27,26 +27,28 @@ returns integer
 language sql
 set search_path = ''
 as $$
-  with parents as (
-    -- One parent per family. A re-invite (new phone) moves the same row to
-    -- the new account, so the nudge follows her.
-    select family_id, id, created_at
-    from public.members
-    where role = 'parent'
-  ),
-  children as (
+  with children as (
     select family_id, id,
            row_number() over (partition by family_id order by created_at, id) as rank
     from public.members
     where role = 'child'
   ),
+  schedules as materialized (
+    -- An unknown zone would make "at time zone" abort the run for every
+    -- family, so drop it first (the schema already rejects them on write).
+    -- Materialized, so the planner can't evaluate a zone before this filter.
+    select * from public.schedules
+    where time_zone in (select name from pg_catalog.pg_timezone_names)
+  ),
   days as (
     -- Look at yesterday too, so a window that ends late in the evening still
     -- escalates after local midnight.
-    select s.family_id, s.time_zone, p.id as parent_id, d.day,
-           (d.day + s.window_end) at time zone s.time_zone as window_closed_at
-    from public.schedules s
-    join parents p on p.family_id = s.family_id
+    select s.family_id, s.time_zone, p.id as parent_id, p.created_at as parent_joined_at,
+           d.day, (d.day + s.window_end) at time zone s.time_zone as window_closed_at
+    from schedules s
+    -- The family's one parent. A new phone moves this same row to her new
+    -- account, so the nudge and her earlier check-ins follow her.
+    join public.members p on p.family_id = s.family_id and p.role = 'parent'
     cross join lateral (
       values ((p_now at time zone s.time_zone)::date),
              ((p_now at time zone s.time_zone)::date - 1)
@@ -64,13 +66,14 @@ as $$
     where p_now >= dy.window_closed_at
       and p_now < dy.window_closed_at + interval '12 hours'
       -- Nothing for a day that ended before the parent joined.
-      and exists (select 1 from parents p
-                  where p.family_id = dy.family_id and p.created_at < dy.window_closed_at)
+      and dy.parent_joined_at < dy.window_closed_at
+      -- Only her own check-in counts, from the start of that day on (a tap
+      -- just after midnight still answers a late-evening window).
       and not exists (
         select 1 from public.checkins c
         where c.family_id = dy.family_id
-          and c.created_at >= dy.day::timestamp at time zone dy.time_zone
-          and c.created_at < (dy.day + 1)::timestamp at time zone dy.time_zone)
+          and c.member_id = dy.parent_id
+          and c.created_at >= dy.day::timestamp at time zone dy.time_zone)
       and not exists (
         select 1 from public.alerts a
         where a.family_id = dy.family_id and a.day = dy.day
