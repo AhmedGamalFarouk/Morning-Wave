@@ -24,7 +24,9 @@
       body: JSON.stringify(row),
     });
     // 409 means this email is already on the list, which is fine.
-    if (!res.ok && res.status !== 409) throw new Error("Signup failed: " + res.status);
+    if (res.ok || res.status === 409) return;
+    // 400 is the database refusing the row, most likely the email address.
+    throw new Error(res.status === 400 ? "rejected" : "Signup failed: " + res.status);
   }
 
   form.addEventListener("submit", async (event) => {
@@ -51,7 +53,9 @@
       show("You’re on the list. We’ll email you when Morning Wave is ready.", false);
     } catch (err) {
       console.error(err);
-      show("Something went wrong. Please try again in a minute.", true);
+      show(err.message === "rejected"
+        ? "That email address doesn’t look right. Please check it."
+        : "Something went wrong. Please try again in a minute.", true);
     } finally {
       button.disabled = false;
     }

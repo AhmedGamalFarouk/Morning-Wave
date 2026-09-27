@@ -7,10 +7,10 @@
   <meta name="description" content="A daily good-morning check-in for parents who live alone. One tap from them, peace of mind for you. Join the waitlist.">
   <meta property="og:title" content="Morning Wave: a good-morning from Mom, every day">
   <meta property="og:description" content="A daily good-morning check-in for parents who live alone. Join the waitlist.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 24a12 12 0 0 1 24 0z' fill='%23D9831F'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 24a12 12 0 0 1 24 0z' fill='%23F6B94B'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:wght@400;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700&family=Fraunces:opsz,wght,SOFT,WONK@9..144,600,100,0&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -44,7 +44,8 @@
 
       <form id="waitlist-form" novalidate>
         <label for="email">Your email</label>
-        <input id="email" name="email" type="email" autocomplete="email" required maxlength="254">
+        <input id="email" name="email" type="email" autocomplete="email" required maxlength="254"
+               pattern="[^@\s]+@[^@\s]+\.[^@\s]+" title="An email address like name@example.com">
 
         <fieldset>
           <legend>What phone do you use?</legend>

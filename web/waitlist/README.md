@@ -18,6 +18,16 @@ Connect the GitHub repo in Cloudflare Pages, then set:
 - Build command: none
 - Build output directory: `web/waitlist`
 
+## Before launch
+
+- Double opt-in: signups aren't confirmed by email yet, so a mistyped or fake
+  address still lands in the table. Add a confirmation email before the launch
+  email goes out (plan phase 5). Doing it for $0 needs a free transactional
+  email tier (Resend or Brevo) plus an Edge Function, and a verified sending
+  domain.
+- Look and feel follow the app's `DESIGN.md` and `lib/theme/palette.dart`
+  (paper, ink, sun; Fraunces and Atkinson Hyperlegible Next). Keep them in step.
+
 ## Try it locally
 
 ```sh
