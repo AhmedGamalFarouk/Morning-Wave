@@ -38,9 +38,12 @@ Future<bool> _initFirebase() async {
     debugPrintStack(stackTrace: stack);
     return false;
   }
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  final crashlytics = FirebaseCrashlytics.instance;
+  // Keep dev crashes out of the dashboard watched during testing.
+  await crashlytics.setCrashlyticsCollectionEnabled(!kDebugMode);
+  FlutterError.onError = crashlytics.recordFlutterError;
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    crashlytics.recordError(error, stack, fatal: true);
     return true;
   };
   return true;

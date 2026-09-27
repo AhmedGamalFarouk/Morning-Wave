@@ -7,11 +7,12 @@ in touch. Flutter app, Android only for now.
 
 ```sh
 flutter pub get
-flutter run --dart-define-from-file=config/dev.json
+flutter run
 ```
 
-The app starts without any config: Supabase, push and crash reporting just
-stay off and a line in the debug log says so.
+That works on a fresh clone: Supabase, push and crash reporting stay off and
+a line in the debug log says so. Once `config/dev.json` exists (below), run
+`flutter run --dart-define-from-file=config/dev.json` to connect Supabase.
 
 To preview the child's home instead of the parent's, add
 `--dart-define=PREVIEW=child` (or `child-waiting`, `child-away`). Screens use
