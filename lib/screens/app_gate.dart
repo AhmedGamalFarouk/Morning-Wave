@@ -34,11 +34,13 @@ const _cantReach =
     'We can’t reach Morning Wave just now. Try again in a moment.';
 
 class _AppGateState extends State<AppGate> {
-  Membership? _membership;
+  /// Null until loaded; empty when the person isn't in a family yet.
+  List<Membership>? _families;
   var _loading = false;
   var _unreachable = false;
   var _signingIn = false;
   var _enteringCode = false;
+  var _addingParent = false;
 
   @override
   void initState() {
@@ -48,12 +50,12 @@ class _AppGateState extends State<AppGate> {
 
   Future<void> _load() async {
     setState(() {
-      _loading = true;
+      _loading = _families == null;
       _unreachable = false;
     });
     try {
-      final membership = await widget.families.myMembership();
-      if (mounted) setState(() => _membership = membership);
+      final families = await widget.families.myFamilies();
+      if (mounted) setState(() => _families = families);
     } catch (error) {
       debugPrint('Loading the family: $error');
       // Without knowing the family, setup could make a second one.
@@ -83,8 +85,8 @@ class _AppGateState extends State<AppGate> {
   Future<String?> _join(String code) async {
     try {
       await widget.auth.signInAsParent();
-      final membership = await widget.families.joinFamily(code);
-      if (mounted) setState(() => _membership = membership);
+      await widget.families.joinFamily(code);
+      await _load();
       return null;
     } on UnknownInviteCode {
       return 'That code isn’t one we know yet. Check it with your family '
@@ -95,12 +97,24 @@ class _AppGateState extends State<AppGate> {
     }
   }
 
+  /// From the code screen back to welcome. A parent account that never
+  /// joined a family is dropped, so a child who tapped the wrong path can
+  /// still reach Google sign-in.
+  Future<void> _leaveCode() async {
+    if (widget.auth.isSignedIn) await widget.auth.signOut();
+    if (mounted) {
+      setState(() {
+        _enteringCode = false;
+        _families = null;
+      });
+    }
+  }
+
   Future<String?> _startFamily(String parentName) async {
     try {
-      final membership = await widget.families.createFamily(
-        parentName: parentName,
-      );
-      if (mounted) setState(() => _membership = membership);
+      await widget.families.createFamily(parentName: parentName);
+      await _load();
+      if (mounted) setState(() => _addingParent = false);
       return null;
     } catch (error) {
       debugPrint('Creating a family: $error');
@@ -108,41 +122,57 @@ class _AppGateState extends State<AppGate> {
     }
   }
 
+  Future<void> _newParentCode(Membership family) async {
+    try {
+      await widget.families.newParentCode(family.familyId);
+      await _load();
+    } catch (error) {
+      debugPrint('New parent code: $error');
+      _say(_cantReach);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final membership = _membership;
     if (_loading) return const _Dawn();
     if (_unreachable) return _Dawn(onRetry: _load);
-    if (membership != null) {
-      return switch (membership.role) {
-        FamilyRole.parent => ParentHomeScreen(
-          parentName: membership.parentName,
-          requestNotificationPermission: widget.requestNotificationPermission,
-          notificationsEnabled: widget.notificationsEnabled,
-        ),
-        FamilyRole.child => ChildHomeScreen(
-          parentName: membership.parentName,
-          childName: widget.auth.childFirstName,
-          inviteCode: membership.parentJoined ? null : membership.inviteCode,
-          onRefresh: _load,
-        ),
-      };
+    final families = _families ?? const [];
+    final parentOf = families.where((f) => f.role == FamilyRole.parent);
+    if (parentOf.isNotEmpty) {
+      return ParentHomeScreen(
+        parentName: parentOf.first.parentName,
+        requestNotificationPermission: widget.requestNotificationPermission,
+        notificationsEnabled: widget.notificationsEnabled,
+      );
     }
-    // Signed in without a family: the child sets one up, and a parent
-    // whose code didn't go through yet goes back to their code.
-    if (widget.auth.isSignedIn && !widget.auth.isParentAccount) {
+    final signedInChild =
+        widget.auth.isSignedIn && !widget.auth.isParentAccount;
+    if (signedInChild && (families.isEmpty || _addingParent)) {
       return StartFamilyScreen(
         childName: widget.auth.childFirstName,
         onStart: _startFamily,
+        onBack: families.isEmpty
+            ? null
+            : () => setState(() => _addingParent = false),
+      );
+    }
+    if (signedInChild) {
+      return ChildHomeScreen(
+        childName: widget.auth.childFirstName,
+        parents: [
+          for (final family in families)
+            (
+              name: family.parentName,
+              inviteCode: family.parentJoined ? null : family.inviteCode,
+              onNewPhone: () => _newParentCode(family),
+            ),
+        ],
+        onAddParent: () => setState(() => _addingParent = true),
+        onRefresh: _load,
       );
     }
     if (_enteringCode || widget.auth.isSignedIn) {
-      return JoinFamilyScreen(
-        onJoin: _join,
-        onBack: widget.auth.isSignedIn
-            ? null
-            : () => setState(() => _enteringCode = false),
-      );
+      return JoinFamilyScreen(onJoin: _join, onBack: _leaveCode);
     }
     return WelcomeScreen(
       busy: _signingIn,

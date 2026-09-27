@@ -89,9 +89,9 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Already 36sp; bigger scales push the code out of view.
+                  // Already 36sp; bigger scales push an 8-character code out of view.
                   MediaQuery.withClampedTextScaling(
-                    maxScaleFactor: 1.4,
+                    maxScaleFactor: 1.2,
                     child: TextField(
                       controller: _code,
                       autofocus: true,

@@ -7,11 +7,19 @@ import '../widgets/sun_painter.dart';
 /// The grown child's one setup question: what do you call your parent?
 /// Morning Wave greets the parent with that name every morning.
 class StartFamilyScreen extends StatefulWidget {
-  const StartFamilyScreen({super.key, required this.onStart, this.childName});
+  const StartFamilyScreen({
+    super.key,
+    required this.onStart,
+    this.childName,
+    this.onBack,
+  });
 
   /// Null once the family exists; otherwise a line to show.
   final Future<String?> Function(String parentName) onStart;
   final String? childName;
+
+  /// Shown when adding a second parent, to go back home.
+  final VoidCallback? onBack;
 
   @override
   State<StartFamilyScreen> createState() => _StartFamilyScreenState();
@@ -59,8 +67,17 @@ class _StartFamilyScreenState extends State<StartFamilyScreen> {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: widget.onBack == null
+                  ? const SizedBox(height: 56)
+                  : TextButton(
+                      onPressed: widget.onBack,
+                      child: const Text('Back'),
+                    ),
+            ),
             const Center(child: SunMark(size: 88)),
             const SizedBox(height: 16),
             Semantics(

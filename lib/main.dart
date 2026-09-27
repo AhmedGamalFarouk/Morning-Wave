@@ -63,12 +63,7 @@ class MorningWaveApp extends StatelessWidget {
       theme: buildAppTheme(),
       // Without Supabase config, a debug build previews the home screens.
       home: AppConfig.hasSupabase
-          ? AppGate(
-              auth: SupabaseAuth(Supabase.instance.client.auth),
-              families: SupabaseFamilyRepository(Supabase.instance.client),
-              requestNotificationPermission: Notifications.requestPermission,
-              notificationsEnabled: Notifications.areEnabled,
-            )
+          ? _signedInApp()
           : HomeScreen(
               requestNotificationPermission: Notifications.requestPermission,
               notificationsEnabled: Notifications.areEnabled,
@@ -76,4 +71,18 @@ class MorningWaveApp extends StatelessWidget {
             ),
     );
   }
+}
+
+Widget _signedInApp() {
+  final client = Supabase.instance.client;
+  final auth = SupabaseAuth(client.auth);
+  return AppGate(
+    auth: auth,
+    families: SupabaseFamilyRepository(
+      client,
+      childName: () => auth.childFirstName,
+    ),
+    requestNotificationPermission: Notifications.requestPermission,
+    notificationsEnabled: Notifications.areEnabled,
+  );
 }

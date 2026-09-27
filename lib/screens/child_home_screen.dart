@@ -1,29 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../family/family_repository.dart';
 import '../placeholder/family.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
 
+/// One parent on the child's home. [inviteCode] is set until the
+/// parent's phone has joined; [onNewPhone] gets a fresh code for a
+/// reinstall or a new phone.
+typedef ChildParent = ({
+  String name,
+  String? inviteCode,
+  VoidCallback? onNewPhone,
+});
+
 /// The child's home answers one question before anything else:
-/// "How is Mom?"
+/// "How is Mom?" A child looking after both parents in separate homes sees
+/// one card for each.
 class ChildHomeScreen extends StatelessWidget {
   const ChildHomeScreen({
     super.key,
     this.view = ChildView.heard,
-    this.parentName = PlaceholderFamily.parentName,
+    this.parents = const [
+      (name: PlaceholderFamily.parentName, inviteCode: null, onNewPhone: null),
+    ],
     this.childName = PlaceholderFamily.childName,
-    this.inviteCode,
+    this.onAddParent,
     this.onRefresh,
   });
 
   final ChildView view;
-  final String parentName;
+  final List<ChildParent> parents;
   final String? childName;
 
-  /// Set until the parent's phone has joined; the invite then leads.
-  final String? inviteCode;
+  /// Sets up another parent who lives apart, such as Dad.
+  final VoidCallback? onAddParent;
 
   /// Pull down to look again, for example once the parent has joined.
   final Future<void> Function()? onRefresh;
@@ -42,11 +55,26 @@ class ChildHomeScreen extends StatelessWidget {
             style: text.titleLarge?.copyWith(color: Palette.inkSoft),
           ),
         ),
-        const SizedBox(height: 18),
-        if (inviteCode == null)
-          _ParentHero(view: view, parent: parentName)
-        else
-          _InviteCard(code: inviteCode!, parent: parentName),
+        for (final parent in parents) ...[
+          const SizedBox(height: 18),
+          if (parent.inviteCode == null)
+            _ParentHero(
+              view: view,
+              parent: parent.name,
+              onNewPhone: parent.onNewPhone,
+            )
+          else
+            _InviteCard(code: parent.inviteCode!, parent: parent.name),
+        ],
+        if (onAddParent != null) ...[
+          const SizedBox(height: 20),
+          Center(
+            child: TextButton(
+              onPressed: onAddParent,
+              child: const Text('Add a parent who lives apart'),
+            ),
+          ),
+        ],
       ],
     );
     return Scaffold(
@@ -103,16 +131,15 @@ class _InviteCard extends StatelessWidget {
             style: text.bodyLarge?.copyWith(color: Palette.inkSoft),
           ),
           const SizedBox(height: 20),
-          Center(
-            child: MediaQuery.withClampedTextScaling(
-              maxScaleFactor: 1.4,
-              child: SelectableText(
-                code,
-                semanticsLabel: 'Family code ${code.split('').join(' ')}',
-                style: text.displayMedium?.copyWith(
-                  fontSize: 44,
-                  letterSpacing: 8,
-                ),
+          // Scales down rather than wrapping, so the code reads as one line.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SelectableText(
+              displayInviteCode(code),
+              semanticsLabel: 'Family code ${code.split('').join(' ')}',
+              style: text.displayMedium?.copyWith(
+                fontSize: 44,
+                letterSpacing: 4,
               ),
             ),
           ),
@@ -133,10 +160,15 @@ class _InviteCard extends StatelessWidget {
 }
 
 class _ParentHero extends StatefulWidget {
-  const _ParentHero({required this.view, required this.parent});
+  const _ParentHero({
+    required this.view,
+    required this.parent,
+    this.onNewPhone,
+  });
 
   final ChildView view;
   final String parent;
+  final VoidCallback? onNewPhone;
 
   @override
   State<_ParentHero> createState() => _ParentHeroState();
@@ -215,6 +247,13 @@ class _ParentHeroState extends State<_ParentHero> {
           if (widget.view == ChildView.waiting) ...[
             const SizedBox(height: 28),
             FilledButton(onPressed: _call, child: Text('Call $parent')),
+          ],
+          if (widget.onNewPhone != null) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: widget.onNewPhone,
+              child: Text('New phone for $parent?'),
+            ),
           ],
         ],
       ),

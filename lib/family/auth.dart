@@ -18,6 +18,8 @@ abstract interface class Auth {
   Future<bool> signInWithGoogle();
 
   Future<void> signInAsParent();
+
+  Future<void> signOut();
 }
 
 class SupabaseAuth implements Auth {
@@ -71,4 +73,7 @@ class SupabaseAuth implements Auth {
     // A parent who typed a wrong code the first time keeps the same account.
     if (!isSignedIn) await _auth.signInAnonymously();
   }
+
+  @override
+  Future<void> signOut() => _auth.signOut();
 }
