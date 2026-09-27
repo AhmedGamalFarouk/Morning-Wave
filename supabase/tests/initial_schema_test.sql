@@ -7,7 +7,7 @@ select plan(37);
 
 insert into auth.users (id, email)
 select ('00000000-0000-0000-0000-00000000000' || c)::uuid, c || '@test.dev'
-from unnest(array['a', 'b', 'c', 'd', 'e', 'f', 'g']) c;
+from unnest(array['a', 'b', 'c', 'd', 'e', 'f', '7']) c;
 
 -- Codes and ids handed between the people below.
 create temp table ids (who text primary key, family_id uuid, parent_code text, child_code text);
@@ -100,7 +100,7 @@ select is((select count(*) from public.join_family((select parent_code from ids 
 select public.join_family((select child_code from ids where who = 'a'), 'Lina');
 select is((select role from public.members where user_id = auth.uid()),
           'child', 'a sibling joins as a child with the child code');
-select pg_temp.act_as('g', true);
+select pg_temp.act_as('7', true);
 select throws_ok($$ select public.join_family((select child_code from ids where who = 'a'), 'x') $$,
                  '42501', null, 'anonymous users cannot use the child code');
 
@@ -120,7 +120,7 @@ select is((select count(*) from public.families), 0::bigint, 'the old phone lose
 select pg_temp.act_as('d');
 select isnt((select child_code from public.rotate_child_code((select family_id from ids where who = 'a'))),
             (select child_code from ids where who = 'a'), 'a child can replace the sibling code');
-select pg_temp.act_as('g');
+select pg_temp.act_as('7');
 select is((select count(*) from public.join_family((select child_code from ids where who = 'a'), 'x')),
           0::bigint, 'the old sibling code no longer works');
 
