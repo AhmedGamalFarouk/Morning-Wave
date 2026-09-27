@@ -1,0 +1,20 @@
+name: Database
+
+on:
+  pull_request:
+    paths: [supabase/**, .github/workflows/db.yml]
+  push:
+    branches: [main]
+    paths: [supabase/**, .github/workflows/db.yml]
+
+jobs:
+  pgtap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Applies every migration to a fresh local Postgres, then runs supabase/tests.
+      - run: supabase db start
+      - run: supabase test db
