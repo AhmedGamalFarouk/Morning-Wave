@@ -115,16 +115,23 @@ class SupabaseFamilyRepository implements FamilyRepository {
     required String parentName,
     required String myName,
   }) async {
-    await _db.rpc(
+    Future<void> create(String timeZone) => _db.rpc(
       'create_family',
-      // The child's zone to start with; the parent's phone corrects it
-      // when it joins, for a parent who lives elsewhere.
       params: {
         'parent_name': parentName,
         'my_name': myName,
-        'time_zone': await _timeZone(),
+        'time_zone': timeZone,
       },
     );
+    // The child's zone to start with; the parent's phone corrects it when
+    // it joins, for a parent who lives elsewhere.
+    try {
+      await create(await _timeZone());
+    } on PostgrestException catch (error) {
+      // A zone the database doesn't list (23514) mustn't block setup.
+      if (error.code != '23514') rethrow;
+      await create('UTC');
+    }
   }
 
   @override
