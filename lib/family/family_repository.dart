@@ -56,6 +56,11 @@ class UnknownInviteCode implements Exception {
   const UnknownInviteCode();
 }
 
+/// Thrown when the code is for a family this person is already in.
+class AlreadyInFamily implements Exception {
+  const AlreadyInFamily();
+}
+
 /// Thrown after too many codes that didn't lead to a family.
 class TooManyCodes implements Exception {
   const TooManyCodes();
@@ -74,7 +79,8 @@ abstract interface class FamilyRepository {
     required String myName,
   });
 
-  /// The code decides the role. Throws [UnknownInviteCode] or [TooManyCodes].
+  /// The code decides the role. Throws [UnknownInviteCode], [AlreadyInFamily]
+  /// or [TooManyCodes].
   Future<void> joinFamily(String code, {required String myName});
 
   /// A fresh parent code for a reinstalled or new phone. The parent stays in
@@ -144,6 +150,8 @@ class SupabaseFamilyRepository implements FamilyRepository {
       );
     } on PostgrestException catch (error) {
       if (error.code == 'PT429') throw const TooManyCodes();
+      // A brother or sister code for a family they're already in.
+      if (error.code == '23505') throw const AlreadyInFamily();
       rethrow;
     }
     if (!joinedAFamily(family)) throw const UnknownInviteCode();

@@ -94,6 +94,7 @@ class _FakeFamilies implements FamilyRepository {
       mine = [_family('Mom', role: FamilyRole.parent)];
       return;
     }
+    if (typed == _childCode && mine.isNotEmpty) throw const AlreadyInFamily();
     wrongCodes++;
     throw const UnknownInviteCode();
   }
@@ -340,6 +341,23 @@ void main() {
 
     expect(find.text('Mom’s phone needs a new code'), findsOneWidget);
     expect(find.text('New phone for Mom?'), findsOneWidget);
+  });
+
+  testWidgets('a sibling code for your own family says you’re in', (
+    tester,
+  ) async {
+    final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
+    final families = _FakeFamilies()..mine = [_family('Mom')];
+    await tester.pumpWidget(_app(auth, families));
+    await _settle(tester);
+
+    await _tap(tester, 'Add a parent who lives apart');
+    await _tap(tester, 'I have a code from my family');
+    await _typeCode(tester, _childCode);
+    expect(
+      find.text('You’re already in this family. Go back to see them.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a child can look after two parents who live apart', (

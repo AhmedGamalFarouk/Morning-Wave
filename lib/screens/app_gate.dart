@@ -124,6 +124,10 @@ class _AppGateState extends State<AppGate> {
       if (await _joinedSince(before)) return null;
       return 'That code isn’t one we know yet. Check it with your family '
           'and try once more.';
+    } on AlreadyInFamily {
+      // Also what a retry after a lost answer gets.
+      if (await _joinedSince(before)) return null;
+      return 'You’re already in this family. Go back to see them.';
     } on TooManyCodes {
       return 'Let’s take a little break. Try the code again in an hour.';
     } catch (error) {
