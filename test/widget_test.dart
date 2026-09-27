@@ -56,6 +56,7 @@ void main() {
             permissionRequests++;
             return true;
           },
+          notificationsEnabled: () async => false,
         ),
       ),
     );
@@ -74,6 +75,23 @@ void main() {
     await _settle(tester);
 
     expect(permissionRequests, 1);
+    expect(find.text('Yes, bring me notes'), findsNothing);
+  });
+
+  testWidgets('no invitation when notifications are already allowed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        ParentHomeScreen(
+          requestNotificationPermission: () async => true,
+          notificationsEnabled: () async => true,
+        ),
+      ),
+    );
+    await tester.tap(find.bySemanticsLabel('Say good morning to your family'));
+    await _settle(tester);
+
     expect(find.text('Yes, bring me notes'), findsNothing);
   });
 

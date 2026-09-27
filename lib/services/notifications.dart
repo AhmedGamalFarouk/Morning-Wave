@@ -39,6 +39,10 @@ class Notifications {
   static Future<bool> requestPermission() async =>
       await _android?.requestNotificationsPermission() ?? false;
 
+  /// Whether notifications are already allowed, so the app doesn't ask again.
+  static Future<bool> areEnabled() async =>
+      await _android?.areNotificationsEnabled() ?? false;
+
   /// Android only shows FCM notifications itself while the app is in the
   /// background, so foreground ones are posted here.
   static Future<void> showForeground(RemoteMessage message) async {

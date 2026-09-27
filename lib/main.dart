@@ -60,6 +60,7 @@ class MorningWaveApp extends StatelessWidget {
       theme: buildAppTheme(),
       home: HomeScreen(
         requestNotificationPermission: Notifications.requestPermission,
+        notificationsEnabled: Notifications.areEnabled,
         preview: parseHomePreview(AppConfig.preview),
       ),
     );

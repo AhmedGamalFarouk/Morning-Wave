@@ -19,6 +19,7 @@ class ParentHomeScreen extends StatefulWidget {
     this.initial = ParentMorning.ready,
     this.today,
     this.requestNotificationPermission,
+    this.notificationsEnabled,
   });
 
   final ParentMorning initial;
@@ -26,6 +27,10 @@ class ParentHomeScreen extends StatefulWidget {
   /// Asked only after the first good morning, behind a warm invitation,
   /// never as a system dialog on first open.
   final Future<bool> Function()? requestNotificationPermission;
+
+  /// When this says notifications are already allowed, the invitation
+  /// never shows.
+  final Future<bool> Function()? notificationsEnabled;
 
   /// Fixed date for tests and previews; the real clock otherwise.
   final DateTime? today;
@@ -43,6 +48,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   DateTime? _backOn;
   Timer? _undoTimer;
   var _notesAsked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.notificationsEnabled?.call().then((enabled) {
+      if (enabled && mounted) setState(() => _notesAsked = true);
+    });
+  }
 
   @override
   void dispose() {

@@ -19,10 +19,12 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.requestNotificationPermission,
+    required this.notificationsEnabled,
     this.preview = HomePreview.parent,
   });
 
   final Future<bool> Function() requestNotificationPermission;
+  final Future<bool> Function() notificationsEnabled;
   final HomePreview preview;
 
   @override
@@ -30,6 +32,7 @@ class HomeScreen extends StatelessWidget {
     return switch (preview) {
       HomePreview.parent => ParentHomeScreen(
         requestNotificationPermission: requestNotificationPermission,
+        notificationsEnabled: notificationsEnabled,
       ),
       HomePreview.child => const ChildHomeScreen(),
       HomePreview.childWaiting => const ChildHomeScreen(
