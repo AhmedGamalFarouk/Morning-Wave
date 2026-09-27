@@ -271,7 +271,15 @@ class _ParentHeroState extends State<_ParentHero> {
     final newPhoneCode = widget.parent.parentCode;
     final childCode = widget.parent.childCode;
 
+    // No parent in the family and no code waiting: say what's needed.
+    final needsCode = !widget.parent.joined;
     final (warmth, top, title, line) = switch (widget.view) {
+      _ when needsCode => (
+        0.6,
+        Palette.sky,
+        '$parent’s phone needs a new code',
+        'Get one below and type it on $parent’s phone.',
+      ),
       ChildView.connected => (
         0.8,
         Palette.glow,

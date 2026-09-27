@@ -321,6 +321,27 @@ void main() {
     expect(find.textContaining('Check it with your family'), findsOneWidget);
   });
 
+  testWidgets('a family without a parent or a code asks for a new one', (
+    tester,
+  ) async {
+    final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
+    final families = _FakeFamilies()
+      ..mine = [
+        const Membership(
+          familyId: 'Mom',
+          role: FamilyRole.child,
+          parentName: 'Mom',
+          childCode: _childCode,
+          parentJoined: false,
+        ),
+      ];
+    await tester.pumpWidget(_app(auth, families));
+    await _settle(tester);
+
+    expect(find.text('Mom’s phone needs a new code'), findsOneWidget);
+    expect(find.text('New phone for Mom?'), findsOneWidget);
+  });
+
   testWidgets('a child can look after two parents who live apart', (
     tester,
   ) async {
