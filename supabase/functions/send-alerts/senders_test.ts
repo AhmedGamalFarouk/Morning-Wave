@@ -43,8 +43,8 @@ Deno.test("fcm: signs a valid JWT, sends a high-priority urgent message, reuses 
   const m = mockFetch((url) => url.includes("oauth2") ? tokenOk() : Response.json({ name: "x" }));
   const send = fcmSender(account, m.fn);
 
-  assert.deepEqual(await send(push), { ok: true });
-  assert.deepEqual(await send({ ...push, urgent: false }), { ok: true });
+  assert.deepEqual(await send(push), { kind: "sent" });
+  assert.deepEqual(await send({ ...push, urgent: false }), { kind: "sent" });
   assert.equal(m.calls.filter((c) => c.url.includes("oauth2")).length, 1);
 
   const assertion = new URLSearchParams(m.calls[0].init.body as URLSearchParams).get("assertion")!;
@@ -80,14 +80,13 @@ Deno.test("fcm: an unregistered token is permanent, a 503 is retried", async () 
       : new Response('{"error":{"details":[{"errorCode":"UNREGISTERED"}]}}', { status: 404 })
   );
   const gone = await fcmSender(account, m.fn)(push);
-  assert.equal(!gone.ok && gone.permanent, true);
-  assert.equal(!gone.ok && gone.deadToken, "tok");
+  assert.equal(gone.kind, "failed");
+  assert.equal(gone.kind === "failed" && gone.deadToken, "tok");
   const m2 = mockFetch((url) =>
     url.includes("oauth2") ? tokenOk() : new Response("unavailable", { status: 503 })
   );
   const retry = await fcmSender(account, m2.fn)(push);
-  assert.equal(!retry.ok && retry.permanent, false);
-  assert.equal(!retry.ok && retry.deadToken, undefined);
+  assert.equal(retry.kind, "retry");
 });
 
 Deno.test("fcm: a failed Google token exchange throws, so the alert is retried", async () => {
@@ -104,7 +103,7 @@ Deno.test("brevo: one request, one version per recipient", async () => {
     ...email,
     to: [...email.to, { email: "lee@x.test", name: "Lee" }],
   });
-  assert.deepEqual(res, { ok: true });
+  assert.deepEqual(res, { kind: "sent" });
   assert.equal(m.calls.length, 1);
   assert.equal((m.calls[0].init.headers as Record<string, string>)["api-key"], "key");
   const body = JSON.parse(m.calls[0].init.body as string);
@@ -129,7 +128,7 @@ Deno.test("brevo: only a bad recipient address is permanent", async () => {
   for (const [status, body, permanent] of cases) {
     const m = mockFetch(() => new Response(body, { status }));
     const res = await brevoSender("key", "hello@mw.test", m.fn)(email);
-    assert.equal(!res.ok && res.permanent, permanent, `${status} ${body}`);
+    assert.equal(res.kind, permanent ? "failed" : "retry", `${status} ${body}`);
   }
 });
 

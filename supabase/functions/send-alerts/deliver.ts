@@ -6,17 +6,22 @@ export interface Alert {
   step: number;
   channel: "push" | "urgent_push" | "email";
   parent_name: string;
-  recipient_name: string | null;
   fcm_token: string | null;
   /** For email alerts: every address to write to. */
   emails: { email: string; name: string }[];
-  /** The parent already said good morning today, so nothing should go out. */
+  /** The parent already said good morning that day, or someone acknowledged it. */
   checked_in: boolean;
 }
 
-export type SendResult =
-  | { ok: true }
-  | { ok: false; permanent: boolean; error: string; deadToken?: string };
+/** What happened to one alert. */
+export type Outcome =
+  | { kind: "sent" }
+  /** Worth trying again later (outage, rate limit, setup mistake). */
+  | { kind: "retry"; error: string }
+  /** Can't ever work. deadToken: a phone token to clear from the member. */
+  | { kind: "failed"; error: string; deadToken?: string }
+  /** Nothing to say any more: the parent already said good morning. */
+  | { kind: "skipped" };
 
 export interface Push {
   token: string;
@@ -35,43 +40,35 @@ export interface Email {
 
 export interface Deps {
   claim(): Promise<Alert[]>;
-  /** error null = sent. permanent = don't retry. deadToken = clear it from the member. */
-  finish(id: Alert["id"], error: string | null, permanent: boolean, deadToken?: string): Promise<void>;
-  push(p: Push): Promise<SendResult>;
+  finish(id: Alert["id"], outcome: Outcome): Promise<void>;
+  push(p: Push): Promise<Outcome>;
   /** One call per alert, so a retry can't half-repeat it. */
-  email(e: Email): Promise<SendResult>;
+  email(e: Email): Promise<Outcome>;
 }
 
 export async function deliverPending(deps: Deps) {
   const alerts = await deps.claim();
-  const counts = { sent: 0, failed: 0, skipped: 0 };
+  const counts = { sent: 0, retry: 0, failed: 0, skipped: 0 };
   for (const alert of alerts) {
-    const result = await deliver(alert, deps).catch(
-      (e): SendResult => ({ ok: false, permanent: false, error: String(e) }),
-    );
-    if (result.ok) counts.sent++;
-    else if (result.error === "checked_in") counts.skipped++;
-    else counts.failed++;
-    if (result.ok) await deps.finish(alert.id, null, false);
-    else await deps.finish(alert.id, result.error, result.permanent, result.deadToken);
+    const outcome = await deliver(alert, deps).catch((e): Outcome => ({ kind: "retry", error: String(e) }));
+    counts[outcome.kind]++;
+    // One row failing to record must not stop the rest of the batch. The row
+    // keeps its lease and comes back after it lapses.
+    await deps.finish(alert.id, outcome).catch((e) => console.error(`finish ${alert.id}: ${e}`));
   }
   return counts;
 }
 
-function deliver(alert: Alert, deps: Deps): Promise<SendResult> {
-  if (alert.checked_in) return fail("checked_in");
+async function deliver(alert: Alert, deps: Deps): Promise<Outcome> {
+  if (alert.checked_in) return { kind: "skipped" };
   const data = { kind: "morning", step: String(alert.step) };
 
   if (alert.channel === "email") {
-    if (alert.emails.length === 0) return fail("no_email");
-    return deps.email({ to: alert.emails, ...childEmail(alert.parent_name) });
+    if (alert.emails.length === 0) return { kind: "failed", error: "no_email" };
+    return await deps.email({ to: alert.emails, ...childEmail(alert.parent_name) });
   }
 
-  if (!alert.fcm_token) return fail("no_token");
+  if (!alert.fcm_token) return { kind: "failed", error: "no_token" };
   const words = alert.step === 1 ? parentNudge() : childPush(alert.parent_name);
-  return deps.push({ token: alert.fcm_token, ...words, urgent: alert.channel === "urgent_push", data });
-}
-
-function fail(error: string): Promise<SendResult> {
-  return Promise.resolve({ ok: false, permanent: true, error });
+  return await deps.push({ token: alert.fcm_token, ...words, urgent: alert.channel === "urgent_push", data });
 }

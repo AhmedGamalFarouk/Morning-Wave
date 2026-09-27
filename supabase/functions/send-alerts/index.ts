@@ -1,9 +1,10 @@
-// send-alerts: delivers the alert rows the every-minute job inserts.
-// The job calls this with pg_net (see private.kick_alert_sender) whenever
-// rows are waiting. Each call claims the waiting rows in the database, so
-// two overlapping calls never send the same alert, and rows that fail are
-// released to be retried on the next minute.
-import { deliverPending } from "./deliver.ts";
+// send-alerts: delivers the alert rows the missed-morning job inserts.
+// A 30-second pg_cron job calls this with pg_net (private.kick_alert_sender)
+// whenever rows are ready. Each call claims those rows in the database, so
+// two overlapping calls never send the same alert; rows that fail for a
+// temporary reason come back after a growing wait (finish_alert).
+import { timingSafeEqual } from "node:crypto";
+import { deliverPending, type Outcome } from "./deliver.ts";
 import { brevoSender } from "./email.ts";
 import { fcmSender } from "./fcm.ts";
 import { postgrest } from "./db.ts";
@@ -26,13 +27,7 @@ Deno.serve(async (req) => {
   const db = postgrest(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
   const counts = await deliverPending({
     claim: () => db.rpc("claim_alerts", {}),
-    finish: (id, error, permanent, deadToken) =>
-      db.rpc("finish_alert", {
-        p_id: id,
-        p_error: error,
-        p_permanent: permanent,
-        p_dead_token: deadToken ?? null,
-      }),
+    finish: (id, outcome) => db.rpc("finish_alert", { p_id: id, ...finishArgs(outcome) }),
     push: (p) => (push ??= fcmSender(JSON.parse(env("FCM_SERVICE_ACCOUNT"))))(p),
     email: (e) => (email ??= brevoSender(env("BREVO_API_KEY"), env("ALERT_EMAIL_FROM")))(e),
   });
@@ -40,9 +35,20 @@ Deno.serve(async (req) => {
   return Response.json(counts);
 });
 
+function finishArgs(o: Outcome) {
+  switch (o.kind) {
+    case "sent":
+      return { p_error: null, p_permanent: false, p_dead_token: null };
+    case "retry":
+      return { p_error: o.error, p_permanent: false, p_dead_token: null };
+    case "failed":
+      return { p_error: o.error, p_permanent: true, p_dead_token: o.deadToken ?? null };
+    case "skipped":
+      return { p_error: "checked_in", p_permanent: true, p_dead_token: null };
+  }
+}
+
 function safeEqual(a: string, b: string): boolean {
   const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
-  return diff === 0;
+  return x.length === y.length && timingSafeEqual(x, y);
 }

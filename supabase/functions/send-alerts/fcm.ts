@@ -1,6 +1,6 @@
 // FCM HTTP v1: trade the service account for a Google access token, then
 // send one message per call.
-import type { Push, SendResult } from "./deliver.ts";
+import type { Outcome, Push } from "./deliver.ts";
 
 interface ServiceAccount {
   project_id: string;
@@ -29,7 +29,7 @@ export function fcmSender(account: ServiceAccount, fetchFn: Fetch = fetch) {
     return cached.token;
   }
 
-  return async function send(p: Push): Promise<SendResult> {
+  return async function send(p: Push): Promise<Outcome> {
     const res = await fetchFn(
       `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`,
       {
@@ -54,13 +54,13 @@ export function fcmSender(account: ServiceAccount, fetchFn: Fetch = fetch) {
         }),
       },
     );
-    if (res.ok) return { ok: true };
+    if (res.ok) return { kind: "sent" };
     const text = await res.text();
     // A token that's gone (app removed, data cleared) won't come back by retrying.
-    const permanent = res.status === 404 || text.includes("UNREGISTERED") ||
+    const gone = res.status === 404 || text.includes("UNREGISTERED") ||
       (res.status === 400 && text.includes("registration token"));
     const error = `fcm ${res.status}: ${text.slice(0, 300)}`;
-    return permanent ? { ok: false, permanent, error, deadToken: p.token } : { ok: false, permanent, error };
+    return gone ? { kind: "failed", error, deadToken: p.token } : { kind: "retry", error };
   };
 }
 

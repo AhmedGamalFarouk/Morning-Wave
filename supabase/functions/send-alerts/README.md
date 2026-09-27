@@ -30,11 +30,17 @@ select vault.create_secret('<same value as ALERTS_WEBHOOK_SECRET>', 'alerts_webh
 ## Deploy
 
 ```sh
-supabase functions deploy send-alerts --no-verify-jwt
+supabase functions deploy send-alerts
 ```
 
-`--no-verify-jwt` because the caller is the database, which proves itself with the shared secret instead of a
-user token.
+`supabase/config.toml` turns off JWT checks for this function: the caller is the database, which proves itself
+with the shared secret instead of a user token.
+
+## Health
+
+The every-30-seconds job writes the `send-alerts` row in `heartbeats` only while no alert has waited more than
+10 minutes, so the uptime check on heartbeats also catches a bad secret, a failing function, or an FCM or
+email outage.
 
 ## Test
 
@@ -42,4 +48,4 @@ user token.
 cd supabase/functions/send-alerts && deno test
 ```
 
-Database side: `supabase test db` runs `supabase/tests/alert_delivery_test.sql`.
+Database side: `supabase test db` runs `supabase/tests/alert_delivery_test.sql` (CI does too).
