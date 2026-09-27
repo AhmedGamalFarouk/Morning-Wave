@@ -16,7 +16,7 @@
 -- Escalation stops as soon as the parent checks in, or someone acknowledges
 -- any of that day's alerts. If the job was down, due steps are caught up, in
 -- order, for up to 12 hours after the window closed. Families in away mode
--- are skipped until their return day (schedules.paused_until). Days are the
+-- are skipped through their return day (schedules.paused_until). Days are the
 -- family's own local days, so time zones and daylight saving follow
 -- schedules.time_zone.
 
@@ -28,11 +28,10 @@ language sql
 set search_path = ''
 as $$
   with parents as (
-    -- The earliest parent to join gets the nudge.
-    select distinct on (family_id) family_id, id, created_at
+    -- One parent per family: a re-invite (new phone) replaces the row.
+    select family_id, id, created_at
     from public.members
     where role = 'parent'
-    order by family_id, created_at, id
   ),
   children as (
     select family_id, id,
@@ -51,7 +50,8 @@ as $$
       values ((p_now at time zone s.time_zone)::date),
              ((p_now at time zone s.time_zone)::date - 1)
     ) as d(day)
-    where s.paused_until is null or d.day >= s.paused_until
+    -- paused_until is the day she's back; mornings resume the day after.
+    where s.paused_until is null or d.day > s.paused_until
   ),
   missed as (
     select dy.*
@@ -60,7 +60,8 @@ as $$
     -- alert about yesterday morning would only confuse people.
     where p_now >= dy.window_closed_at
       and p_now < dy.window_closed_at + interval '12 hours'
-      -- Nothing for a day that ended before the parent joined.
+      -- Nothing for a day that ended before the parent joined. Joining again
+      -- from a new phone counts as hearing from her that day.
       and exists (select 1 from parents p
                   where p.family_id = dy.family_id and p.created_at < dy.window_closed_at)
       and not exists (

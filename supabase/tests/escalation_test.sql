@@ -4,7 +4,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(36);
 
 -- A family with a parent who joined long ago, n children and a schedule.
 create function pg_temp.family(tz text, window_end time, n_children int default 2,
@@ -105,13 +105,13 @@ update public.alerts set acknowledged_at = '2026-10-05 13:31Z' where family_id =
 select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'acknowledged: no further steps');
 drop table fam;
 
--- 6. Away mode sends nothing until the return day, then resumes.
+-- 6. Away mode sends nothing through the day she's back, then resumes.
 create temp table fam as
   select pg_temp.family('America/New_York', '09:00', paused_until => '2026-10-07') as id;
 select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'away: nothing sent');
-select is(pg_temp.run('2026-10-06 14:00Z'), 0, 'away, day before return: nothing sent');
-select is(pg_temp.run('2026-10-07 13:15Z'), 1, 'return day: escalation resumes');
+select is(pg_temp.run('2026-10-07 14:00Z'), 0, 'away, the day she''s back: nothing sent');
+select is(pg_temp.run('2026-10-08 13:15Z'), 1, 'morning after she''s back: escalation resumes');
 drop table fam;
 
 -- 7. Daylight saving. New York springs forward on 14 Mar 2027:
@@ -161,7 +161,26 @@ select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 16:00Z'), 0, 'setup day: nothing sent');
 drop table fam;
 
--- 12. After an outage, due steps catch up in order, but only for 12 hours.
+-- 12. A new phone replaces the parent's row: the nudge goes to the new one,
+--     and re-joining after the window counts as hearing from her that day.
+create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
+select pg_temp.only(id) from fam;
+create function pg_temp.new_phone(f uuid, at timestamptz) returns uuid language sql as $$
+  delete from public.members where family_id = f and role = 'parent';
+  insert into public.members (family_id, role, created_at) values (f, 'parent', at) returning id;
+$$;
+create temp table new_parent as select pg_temp.new_phone(id, '2026-10-05 12:00Z') as id from fam;
+select pg_temp.run('2026-10-05 13:15Z');
+select is((select recipient_id from public.alerts a join fam on a.family_id = fam.id where step = 1),
+          (select id from new_parent), 'new phone before the window: nudge goes to the new parent row');
+drop table fam;
+create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
+select pg_temp.only(id) from fam;
+select pg_temp.new_phone(id, '2026-10-05 13:05Z') from fam;
+select is(pg_temp.run('2026-10-05 14:00Z'), 0, 'new phone after the window: nothing sent that day');
+drop table fam;
+
+-- 13. After an outage, due steps catch up in order, but only for 12 hours.
 create temp table fam as select pg_temp.family('America/New_York', '09:00') as id;
 select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-05 13:50Z'), 4, 'outage: all due steps at once');
@@ -172,7 +191,7 @@ select pg_temp.only(id) from fam;
 select is(pg_temp.run('2026-10-06 01:30Z'), 0, 'outage over 12 hours: that morning is let go');
 drop table fam;
 
--- 13. The job itself: heartbeat written, scheduled every minute.
+-- 14. The job itself: heartbeat written, scheduled every minute.
 select public.run_escalation();
 select ok((select last_run_at = now() from public.heartbeats where job = 'escalation'),
           'run_escalation writes the heartbeat');
