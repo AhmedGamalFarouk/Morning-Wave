@@ -56,6 +56,10 @@ class Notifications {
           channel.name,
           channelDescription: channel.description,
           importance: channel.importance,
+          // Android 7 ignores channels and reads priority instead.
+          priority: channel.importance.value >= Importance.high.value
+              ? Priority.high
+              : Priority.defaultPriority,
         ),
       ),
     );
