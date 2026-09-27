@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:morning_wave/placeholder/family.dart';
 import 'package:morning_wave/screens/child_home_screen.dart';
@@ -33,7 +36,36 @@ void _expectWarmCopy(WidgetTester tester) {
   handle.dispose();
 }
 
+/// Real fonts, so line breaks in tests match the phone.
+Future<void> _loadFont(String family, String path) async {
+  final bytes = File(path).readAsBytesSync();
+  await (FontLoader(
+    family,
+  )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+}
+
+/// Fails if any word on screen is split across two lines.
+void _expectWholeWords(WidgetTester tester) {
+  for (final paragraph in tester.renderObjectList<RenderParagraph>(
+    find.byType(RichText),
+  )) {
+    final text = paragraph.text.toPlainText();
+    for (final word in RegExp(r'\S+').allMatches(text)) {
+      final boxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: word.start, extentOffset: word.end),
+      );
+      final lines = boxes.map((box) => box.top.round()).toSet();
+      expect(lines, hasLength(1), reason: '"${word.group(0)}" in "$text"');
+    }
+  }
+}
+
 void main() {
+  setUpAll(() async {
+    await _loadFont('Fraunces', 'assets/fonts/Fraunces.ttf');
+    await _loadFont('AtkinsonHyperlegibleNext', 'assets/fonts/Atkinson.ttf');
+  });
+
   // A typical Android phone: 411 x 891 dp.
   setUp(() {
     final view =
@@ -208,6 +240,50 @@ void main() {
       expect(label.size.height, lessThan(line * 2.5));
     });
   }
+
+  group('no word breaks mid-word at 320dp and 2x text', () {
+    Future<void> pumpNarrow(WidgetTester tester, Widget home) async {
+      tester.view.physicalSize = const Size(840, 1800);
+      tester.view.devicePixelRatio = 2.625;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(320, 686),
+            textScaler: TextScaler.linear(2),
+          ),
+          child: _app(home),
+        ),
+      );
+      await _settle(tester);
+    }
+
+    testWidgets('parent, ready and sent', (tester) async {
+      await pumpNarrow(tester, const ParentHomeScreen());
+      _expectWholeWords(tester);
+      await tester.tap(
+        find.bySemanticsLabel('Say good morning to your family'),
+      );
+      await _settle(tester);
+      _expectWholeWords(tester);
+    });
+
+    testWidgets('parent, away sheet', (tester) async {
+      await pumpNarrow(tester, ParentHomeScreen(today: DateTime(2026, 9, 28)));
+      await tester.scrollUntilVisible(find.text('Going somewhere?'), 200);
+      await tester.ensureVisible(find.text('Going somewhere?'));
+      await tester.pump();
+      await tester.tap(find.text('Going somewhere?'));
+      await _settle(tester);
+      _expectWholeWords(tester);
+    });
+
+    for (final view in ChildView.values) {
+      testWidgets('child, ${view.name}', (tester) async {
+        await pumpNarrow(tester, ChildHomeScreen(view: view));
+        _expectWholeWords(tester);
+      });
+    }
+  });
 
   testWidgets('child hero answers "How is Mom?" first', (tester) async {
     await tester.pumpWidget(_app(const ChildHomeScreen()));

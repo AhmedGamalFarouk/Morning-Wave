@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/whole_words_text.dart';
 
 /// The parent's only setup step: type the code their family gave them.
 /// No account, no password. The words never blame a wrong code.
@@ -73,7 +74,7 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
             const SizedBox(height: 16),
             Semantics(
               header: true,
-              child: Text(
+              child: WholeWordsText(
                 'Hello! Let’s find your family',
                 textAlign: TextAlign.center,
                 style: text.displayMedium,

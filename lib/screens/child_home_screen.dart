@@ -6,6 +6,7 @@ import '../placeholder/family.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/whole_words_text.dart';
 
 /// One parent on the child's home. Until [joined], the card is the invite
 /// with [parentCode]. After that, a [parentCode] is a pending code for a
@@ -122,7 +123,10 @@ class _InviteCard extends StatelessWidget {
           const SizedBox(height: 16),
           Semantics(
             header: true,
-            child: Text('Now, $parent’s phone', style: text.displayMedium),
+            child: WholeWordsText(
+              'Now, $parent’s phone',
+              style: text.displayMedium,
+            ),
           ),
           const SizedBox(height: 12),
           Text(
@@ -215,7 +219,10 @@ class _ParentHeroState extends State<_ParentHero> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('For brothers and sisters', style: text.headlineMedium),
+              WholeWordsText(
+                'For brothers and sisters',
+                style: text.headlineMedium,
+              ),
               const SizedBox(height: 10),
               Text(
                 'They sign in with Google, tap “I have a code from my family” '
@@ -231,6 +238,7 @@ class _ParentHeroState extends State<_ParentHero> {
     );
   }
 
+  // TODO(before closed test): open the phone dialer with Mom's number.
   /// The old phone stops once the new one joins, so ask first.
   Future<void> _confirmNewPhone() async {
     final parent = widget.parent.name;
@@ -323,7 +331,7 @@ class _ParentHeroState extends State<_ParentHero> {
           const SizedBox(height: 16),
           Semantics(
             header: true,
-            child: Text(title, style: text.displayMedium),
+            child: WholeWordsText(title, style: text.displayMedium),
           ),
           const SizedBox(height: 10),
           Text(line, style: text.bodyLarge?.copyWith(color: Palette.inkSoft)),
@@ -332,12 +340,15 @@ class _ParentHeroState extends State<_ParentHero> {
             FilledButton.icon(
               onPressed: _loveSent ? null : _sendLove,
               icon: const HeartMark(color: Palette.peach),
-              label: Text(_loveSent ? 'Love sent' : 'Send love'),
+              label: WholeWordsText(_loveSent ? 'Love sent' : 'Send love'),
             ),
           ],
           if (widget.view == ChildView.waiting) ...[
             const SizedBox(height: 28),
-            FilledButton(onPressed: _call, child: Text('Call $parent')),
+            FilledButton(
+              onPressed: _call,
+              child: WholeWordsText('Call $parent'),
+            ),
           ],
           if (newPhoneCode != null) ...[
             const SizedBox(height: 28),

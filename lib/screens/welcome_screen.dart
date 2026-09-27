@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/whole_words_text.dart';
 
 /// The first screen on both phones. The grown child sets the family up
 /// with Google; the parent only ever needs the code their family gives them.
@@ -33,7 +34,7 @@ class WelcomeScreen extends StatelessWidget {
             const SizedBox(height: 20),
             Semantics(
               header: true,
-              child: Text(
+              child: WholeWordsText(
                 'Morning Wave',
                 textAlign: TextAlign.center,
                 style: text.displayMedium,

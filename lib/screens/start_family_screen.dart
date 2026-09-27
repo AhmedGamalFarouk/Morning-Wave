@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/whole_words_text.dart';
 
 /// The grown child's one setup question: what do you call your parent?
 /// Morning Wave greets the parent with that name every morning.
@@ -86,7 +87,7 @@ class _StartFamilyScreenState extends State<StartFamilyScreen> {
             const SizedBox(height: 16),
             Semantics(
               header: true,
-              child: Text(
+              child: WholeWordsText(
                 '$hello! Who are the good mornings from?',
                 textAlign: TextAlign.center,
                 style: text.displayMedium,
