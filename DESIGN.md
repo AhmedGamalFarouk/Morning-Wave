@@ -47,7 +47,7 @@ emoji, so they look the same on every phone.
 - The sun breathes over 4.8s and its rays turn once every 150s.
 - Tap: the sun sinks slightly, then swells, stretches its rays and lets
   light motes and a few hearts drift up over 1.6s, with one haptic tick.
-- For 10 seconds after the tap, "Tapped by mistake? Undo" sits under the sun.
+- For 10 seconds after the tap, "Oops, not yet" sits under the sun.
 - The sun's words shrink to fit at very large system text sizes; lines only
   break where the label says.
 - Words change by fading the old line out before the new one arrives.

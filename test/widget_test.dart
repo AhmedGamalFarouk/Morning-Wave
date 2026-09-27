@@ -23,10 +23,14 @@ final _coldWords = RegExp(
   caseSensitive: false,
 );
 
+/// Checks what is on screen and what TalkBack reads aloud.
 void _expectWarmCopy(WidgetTester tester) {
-  for (final text in tester.widgetList<Text>(find.byType(Text))) {
-    expect(text.data ?? '', isNot(matches(_coldWords)));
+  final handle = tester.ensureSemantics();
+  for (final text in tester.widgetList<RichText>(find.byType(RichText))) {
+    expect(text.text.toPlainText(), isNot(matches(_coldWords)));
   }
+  expect(find.bySemanticsLabel(_coldWords), findsNothing);
+  handle.dispose();
 }
 
 void main() {
@@ -43,9 +47,7 @@ void main() {
       ..resetDevicePixelRatio();
   });
 
-  testWidgets('home greets the parent and asks for notifications once', (
-    tester,
-  ) async {
+  testWidgets('home greets the parent without a system prompt', (tester) async {
     var permissionRequests = 0;
     await tester.pumpWidget(
       _app(
@@ -60,7 +62,19 @@ void main() {
 
     expect(find.text('Good morning, Mom'), findsOneWidget);
     expect(find.text('Ready to say hello?'), findsOneWidget);
+    expect(permissionRequests, 0);
+
+    // The invitation comes after the first good morning.
+    await tester.tap(find.bySemanticsLabel('Say good morning to your family'));
+    await _settle(tester);
+    await tester.scrollUntilVisible(find.text('Yes, bring me notes'), 200);
+    await tester.ensureVisible(find.text('Yes, bring me notes'));
+    await tester.pump();
+    await tester.tap(find.text('Yes, bring me notes'));
+    await _settle(tester);
+
     expect(permissionRequests, 1);
+    expect(find.text('Yes, bring me notes'), findsNothing);
   });
 
   testWidgets('tapping the sun says good morning and shows the family note', (
@@ -93,7 +107,12 @@ void main() {
 
     expect(find.text('Tomorrow'), findsOneWidget);
     expect(find.text('Next Monday'), findsOneWidget);
+    expect(find.text('Later…'), findsOneWidget);
+    await tester.ensureVisible(find.text('Friday'));
+    await tester.pump();
     await tester.tap(find.text('Friday'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Let my family know'));
     await tester.pump();
     await tester.tap(find.text('Let my family know'));
     await _settle(tester);
@@ -107,6 +126,32 @@ void main() {
     expect(find.text('Ready to say hello?'), findsOneWidget);
   });
 
+  testWidgets('away for longer than a week uses a calendar', (tester) async {
+    await tester.pumpWidget(
+      _app(ParentHomeScreen(today: DateTime(2026, 9, 28))),
+    );
+    await tester.scrollUntilVisible(find.text('Going somewhere?'), 200);
+    await tester.ensureVisible(find.text('Going somewhere?'));
+    await tester.pump();
+    await tester.tap(find.text('Going somewhere?'));
+    await _settle(tester);
+
+    // Tomorrow is preselected, so the main button already works.
+    await tester.ensureVisible(find.text('Later…'));
+    await tester.pump();
+    await tester.tap(find.text('Later…'));
+    await _settle(tester);
+    await tester.tap(find.text('20'));
+    await tester.tap(find.text('That’s the day'));
+    await _settle(tester);
+    await tester.ensureVisible(find.text('Let my family know'));
+    await tester.pump();
+    await tester.tap(find.text('Let my family know'));
+    await _settle(tester);
+
+    expect(find.textContaining('Back on Tue, Oct 20.'), findsOneWidget);
+  });
+
   testWidgets('an accidental good morning can be undone for a short while', (
     tester,
   ) async {
@@ -114,14 +159,14 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Say good morning to your family'));
     await _settle(tester);
-    await tester.tap(find.text('Tapped by mistake? Undo'));
+    await tester.tap(find.text('Oops, not yet'));
     await _settle(tester);
     expect(find.text('Ready to say hello?'), findsOneWidget);
 
     await tester.tap(find.bySemanticsLabel('Say good morning to your family'));
     await tester.pump(ParentHomeScreen.undoWindow);
     await _settle(tester);
-    expect(find.text('Tapped by mistake? Undo'), findsNothing);
+    expect(find.text('Oops, not yet'), findsNothing);
     expect(find.text('Your family knows you’re okay.'), findsOneWidget);
   });
 

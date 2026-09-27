@@ -18,9 +18,14 @@ class ParentHomeScreen extends StatefulWidget {
     super.key,
     this.initial = ParentMorning.ready,
     this.today,
+    this.requestNotificationPermission,
   });
 
   final ParentMorning initial;
+
+  /// Asked only after the first good morning, behind a warm invitation,
+  /// never as a system dialog on first open.
+  final Future<bool> Function()? requestNotificationPermission;
 
   /// Fixed date for tests and previews; the real clock otherwise.
   final DateTime? today;
@@ -37,6 +42,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   late var _morning = widget.initial;
   DateTime? _backOn;
   Timer? _undoTimer;
+  var _notesAsked = false;
 
   @override
   void dispose() {
@@ -55,6 +61,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     _undoTimer = Timer(ParentHomeScreen.undoWindow, () {
       if (mounted) setState(() => _undoTimer = null);
     });
+  }
+
+  void _answerNotes({required bool allow}) {
+    setState(() => _notesAsked = true);
+    if (allow) widget.requestNotificationPermission!();
   }
 
   Future<void> _askAboutAway() async {
@@ -83,7 +94,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
         'You’re away',
         _backOn == null
             ? 'Your family knows.'
-            : 'Back ${_dayName(_backOn!, widget.today ?? DateTime.now())}. '
+            : 'Back ${_dayName(context, _backOn!, widget.today ?? DateTime.now())}. '
                   'Your family knows.',
       ),
     };
@@ -122,7 +133,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                   : Center(
                       child: TextButton(
                         onPressed: () => _set(ParentMorning.ready),
-                        child: const Text('Tapped by mistake? Undo'),
+                        child: const Text('Oops, not yet'),
                       ),
                     ),
             ),
@@ -132,9 +143,19 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               child: AnimatedSwitcher(
                 duration: Motion.crossfade,
                 child: _morning == ParentMorning.sent
-                    ? const Padding(
-                        padding: EdgeInsets.only(top: 8, bottom: 24),
-                        child: _FamilyNote(),
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 24),
+                        child: Column(
+                          children: [
+                            const _FamilyNote(),
+                            if (!_notesAsked &&
+                                widget.requestNotificationPermission !=
+                                    null) ...[
+                              const SizedBox(height: 16),
+                              _NotesInvitation(onAnswer: _answerNotes),
+                            ],
+                          ],
+                        ),
                       )
                     : const SizedBox(width: double.infinity),
               ),
@@ -222,6 +243,41 @@ class _FamilyNote extends StatelessWidget {
   }
 }
 
+/// Asks for notification permission the way a family member would, after
+/// the parent has already felt why it matters.
+class _NotesInvitation extends StatelessWidget {
+  const _NotesInvitation({required this.onAnswer});
+
+  final void Function({required bool allow}) onAnswer;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return PaperCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('So your family’s love reaches you', style: text.headlineSmall),
+          const SizedBox(height: 8),
+          Text(
+            'Let Morning Wave bring you their notes when they send one.',
+            style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => onAnswer(allow: true),
+            child: const Text('Yes, bring me notes'),
+          ),
+          TextButton(
+            onPressed: () => onAnswer(allow: false),
+            child: const Text('Maybe later'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A photo on the fridge. Until the family shares one, the frame says
 /// where it will appear instead of showing a stock picture.
 class _FamilyPhoto extends StatelessWidget {
@@ -268,8 +324,9 @@ class _FamilyPhoto extends StatelessWidget {
   }
 }
 
-/// "tomorrow", "on Friday", or "next Monday" for a week from today.
-String _dayName(DateTime day, DateTime today) {
+/// "tomorrow", "on Friday", "next Monday" for a week from today, or the
+/// date itself further out.
+String _dayName(BuildContext context, DateTime day, DateTime today) {
   const weekdays = [
     'Monday',
     'Tuesday',
@@ -282,8 +339,9 @@ String _dayName(DateTime day, DateTime today) {
   final gap = DateUtils.dateOnly(day).difference(DateUtils.dateOnly(today));
   final weekday = weekdays[day.weekday - 1];
   if (gap.inDays == 1) return 'tomorrow';
+  if (gap.inDays < 7) return 'on $weekday';
   if (gap.inDays == 7) return 'next $weekday';
-  return 'on $weekday';
+  return 'on ${MaterialLocalizations.of(context).formatMediumDate(day)}';
 }
 
 /// Asks which day the parent will be back. Mornings resume on their own
@@ -298,15 +356,33 @@ class _AwaySheet extends StatefulWidget {
 }
 
 class _AwaySheetState extends State<_AwaySheet> {
-  DateTime? _backOn;
+  late final _today = DateUtils.dateOnly(widget.today);
+  late final _days = [
+    for (var i = 1; i <= 7; i++) _today.add(Duration(days: i)),
+  ];
+
+  /// Tomorrow is chosen from the start, so the main button always works.
+  late var _backOn = _days.first;
+
+  /// Longer trips: a calendar for any day after next week.
+  Future<void> _pickLater() async {
+    final later = await showDatePicker(
+      context: context,
+      initialDate: _backOn.isAfter(_days.last)
+          ? _backOn
+          : _today.add(const Duration(days: 14)),
+      firstDate: _today.add(const Duration(days: 8)),
+      lastDate: _today.add(const Duration(days: 365)),
+      helpText: 'When will you be back?',
+      confirmText: 'That’s the day',
+    );
+    if (later != null) setState(() => _backOn = later);
+  }
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final days = [
-      for (var i = 1; i <= 7; i++)
-        DateUtils.dateOnly(widget.today).add(Duration(days: i)),
-    ];
+    final isLater = _backOn.isAfter(_days.last);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -327,19 +403,24 @@ class _AwaySheetState extends State<_AwaySheet> {
               spacing: 10,
               runSpacing: 10,
               children: [
-                for (final day in days)
+                for (final day in _days)
                   _DayChoice(
-                    label: _capitalize(_dayName(day, widget.today)),
+                    label: _capitalize(_dayName(context, day, _today)),
                     selected: _backOn == day,
                     onTap: () => setState(() => _backOn = day),
                   ),
+                _DayChoice(
+                  label: isLater
+                      ? _capitalize(_dayName(context, _backOn, _today))
+                      : 'Later…',
+                  selected: isLater,
+                  onTap: _pickLater,
+                ),
               ],
             ),
             const SizedBox(height: 28),
             FilledButton(
-              onPressed: _backOn == null
-                  ? null
-                  : () => Navigator.pop(context, _backOn),
+              onPressed: () => Navigator.pop(context, _backOn),
               child: const Text('Let my family know'),
             ),
             const SizedBox(height: 8),

@@ -98,46 +98,50 @@ class _MorningSunState extends State<MorningSun> with TickerProviderStateMixin {
             onTapUp: _enabled ? (_) => _press.reverse() : null,
             onTapCancel: _enabled ? _press.reverse : null,
             onTap: _handleTap,
-            child: SizedBox.square(
-              dimension: side,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  _breath,
-                  _turn,
-                  _press,
-                  _celebrate,
-                ]),
-                // Built once and reused every frame; only the paint changes.
-                child: _SunLabel(label: widget.label, side: side),
-                builder: (context, label) {
-                  final bloom = _bloom(_celebrate.value);
-                  final scale =
-                      (1 - 0.05 * Motion.settle.transform(_press.value)) *
-                      (1 + 0.1 * bloom);
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Transform.scale(
-                        scale: scale,
-                        child: CustomPaint(
-                          size: Size.square(side),
-                          painter: SunPainter(
-                            breath: Motion.glow.transform(_breath.value),
-                            turn: _turn.value,
-                            rayReach: 1 + 0.75 * bloom,
-                            warmth: widget.warmth,
+            // The sun repaints every frame; keep that from spreading to the
+            // rest of the screen.
+            child: RepaintBoundary(
+              child: SizedBox.square(
+                dimension: side,
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([
+                    _breath,
+                    _turn,
+                    _press,
+                    _celebrate,
+                  ]),
+                  // Built once and reused every frame; only the paint changes.
+                  child: _SunLabel(label: widget.label, side: side),
+                  builder: (context, label) {
+                    final bloom = _bloom(_celebrate.value);
+                    final scale =
+                        (1 - 0.05 * Motion.settle.transform(_press.value)) *
+                        (1 + 0.1 * bloom);
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Transform.scale(
+                          scale: scale,
+                          child: CustomPaint(
+                            size: Size.square(side),
+                            painter: SunPainter(
+                              breath: Motion.glow.transform(_breath.value),
+                              turn: _turn.value,
+                              rayReach: 1 + 0.75 * bloom,
+                              warmth: widget.warmth,
+                            ),
+                            child: label,
                           ),
-                          child: label,
                         ),
-                      ),
-                      if (_celebrate.isAnimating)
-                        CustomPaint(
-                          size: Size.square(side),
-                          painter: _LightMotesPainter(_celebrate.value),
-                        ),
-                    ],
-                  );
-                },
+                        if (_celebrate.isAnimating)
+                          CustomPaint(
+                            size: Size.square(side),
+                            painter: _LightMotesPainter(_celebrate.value),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),

@@ -15,7 +15,7 @@ HomePreview parseHomePreview(String value) => switch (value) {
   _ => HomePreview.parent,
 };
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.requestNotificationPermission,
@@ -26,20 +26,11 @@ class HomeScreen extends StatefulWidget {
   final HomePreview preview;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    widget.requestNotificationPermission();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return switch (widget.preview) {
-      HomePreview.parent => const ParentHomeScreen(),
+    return switch (preview) {
+      HomePreview.parent => ParentHomeScreen(
+        requestNotificationPermission: requestNotificationPermission,
+      ),
       HomePreview.child => const ChildHomeScreen(),
       HomePreview.childWaiting => const ChildHomeScreen(
         view: ChildView.waiting,
