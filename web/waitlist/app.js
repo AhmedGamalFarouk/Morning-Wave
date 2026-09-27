@@ -6,7 +6,9 @@
 
   // Which community or video sent the visitor, e.g. ?ref=reddit-agingparents
   const params = new URLSearchParams(location.search);
-  const source = (params.get("ref") || params.get("utm_source") || "").slice(0, 64) || null;
+  const ref = params.get("ref") || params.get("utm_source") || "";
+  // Array.from so an emoji at the 64-character cut isn't split in half.
+  const source = Array.from(ref).slice(0, 64).join("") || null;
 
   function show(message, isError) {
     status.textContent = message;
