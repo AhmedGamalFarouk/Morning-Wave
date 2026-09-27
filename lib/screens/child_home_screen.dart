@@ -7,12 +7,14 @@ import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
 
-/// One parent on the child's home. [inviteCode] is set until the
-/// parent's phone has joined; [onNewPhone] gets a fresh code for a
-/// reinstall or a new phone.
+/// One parent on the child's home. Until [joined], the card is the invite
+/// with [parentCode]. After that, a [parentCode] is a pending code for a
+/// reinstalled or new phone. [childCode] lets brothers and sisters in.
 typedef ChildParent = ({
   String name,
-  String? inviteCode,
+  bool joined,
+  String? parentCode,
+  String? childCode,
   VoidCallback? onNewPhone,
 });
 
@@ -24,7 +26,13 @@ class ChildHomeScreen extends StatelessWidget {
     super.key,
     this.view = ChildView.heard,
     this.parents = const [
-      (name: PlaceholderFamily.parentName, inviteCode: null, onNewPhone: null),
+      (
+        name: PlaceholderFamily.parentName,
+        joined: true,
+        parentCode: null,
+        childCode: null,
+        onNewPhone: null,
+      ),
     ],
     this.childName = PlaceholderFamily.childName,
     this.onAddParent,
@@ -57,14 +65,10 @@ class ChildHomeScreen extends StatelessWidget {
         ),
         for (final parent in parents) ...[
           const SizedBox(height: 18),
-          if (parent.inviteCode == null)
-            _ParentHero(
-              view: view,
-              parent: parent.name,
-              onNewPhone: parent.onNewPhone,
-            )
+          if (parent.joined)
+            _ParentHero(view: view, parent: parent)
           else
-            _InviteCard(code: parent.inviteCode!, parent: parent.name),
+            _InviteCard(code: parent.parentCode!, parent: parent.name),
         ],
         if (onAddParent != null) ...[
           const SizedBox(height: 20),
@@ -98,12 +102,6 @@ class _InviteCard extends StatelessWidget {
   final String code;
   final String parent;
 
-  void _copy(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: code));
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Code copied')));
-  }
-
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -131,23 +129,7 @@ class _InviteCard extends StatelessWidget {
             style: text.bodyLarge?.copyWith(color: Palette.inkSoft),
           ),
           const SizedBox(height: 20),
-          // Scales down rather than wrapping, so the code reads as one line.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: SelectableText(
-              displayInviteCode(code),
-              semanticsLabel: 'Family code ${code.split('').join(' ')}',
-              style: text.displayMedium?.copyWith(
-                fontSize: 44,
-                letterSpacing: 4,
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: () => _copy(context),
-            child: const Text('Copy the code'),
-          ),
+          _CodeBlock(code: code),
           const SizedBox(height: 12),
           Text(
             'You’ll see $parent’s good mornings right here.',
@@ -159,16 +141,48 @@ class _InviteCard extends StatelessWidget {
   }
 }
 
+/// A code to read out or send: large, in two groups of four, with a copy
+/// button. Scales down rather than wrapping, so it reads as one line.
+class _CodeBlock extends StatelessWidget {
+  const _CodeBlock({required this.code});
+
+  final String code;
+
+  void _copy(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Code copied')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: SelectableText(
+            displayInviteCode(code),
+            semanticsLabel: 'Family code ${code.split('').join(' ')}',
+            style: text.displayMedium?.copyWith(fontSize: 44, letterSpacing: 4),
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: () => _copy(context),
+          child: const Text('Copy the code'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ParentHero extends StatefulWidget {
-  const _ParentHero({
-    required this.view,
-    required this.parent,
-    this.onNewPhone,
-  });
+  const _ParentHero({required this.view, required this.parent});
 
   final ChildView view;
-  final String parent;
-  final VoidCallback? onNewPhone;
+  final ChildParent parent;
 
   @override
   State<_ParentHero> createState() => _ParentHeroState();
@@ -180,8 +194,35 @@ class _ParentHeroState extends State<_ParentHero> {
   void _sendLove() {
     setState(() => _loveSent = true);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${widget.parent} will see your love.')),
+      SnackBar(content: Text('${widget.parent.name} will see your love.')),
     );
+  }
+
+  /// The old phone stops once the new one joins, so ask first.
+  Future<void> _confirmNewPhone() async {
+    final parent = widget.parent.name;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Palette.paper,
+        title: Text('A new phone for $parent?'),
+        content: Text(
+          'You’ll get a new code for it. Once $parent types it there, '
+          'the old phone stops saying good morning.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Get a code'),
+          ),
+        ],
+      ),
+    );
+    if (yes ?? false) widget.parent.onNewPhone!();
   }
 
   void _call() {
@@ -193,9 +234,17 @@ class _ParentHeroState extends State<_ParentHero> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final parent = widget.parent;
+    final parent = widget.parent.name;
+    final newPhoneCode = widget.parent.parentCode;
+    final childCode = widget.parent.childCode;
 
     final (warmth, top, title, line) = switch (widget.view) {
+      ChildView.connected => (
+        0.8,
+        Palette.glow,
+        '$parent is all set',
+        'Their good mornings will show up here.',
+      ),
       ChildView.heard => (
         1.0,
         Palette.glow,
@@ -248,11 +297,27 @@ class _ParentHeroState extends State<_ParentHero> {
             const SizedBox(height: 28),
             FilledButton(onPressed: _call, child: Text('Call $parent')),
           ],
-          if (widget.onNewPhone != null) ...[
+          if (newPhoneCode != null) ...[
+            const SizedBox(height: 28),
+            Text(
+              'For $parent’s new phone: tap “I have a code” and type',
+              style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
+            ),
+            const SizedBox(height: 12),
+            _CodeBlock(code: newPhoneCode),
+          ] else if (widget.parent.onNewPhone != null) ...[
             const SizedBox(height: 12),
             TextButton(
-              onPressed: widget.onNewPhone,
+              onPressed: _confirmNewPhone,
               child: Text('New phone for $parent?'),
+            ),
+          ],
+          if (childCode != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Brothers and sisters can join with '
+              '${displayInviteCode(childCode)}.',
+              style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
             ),
           ],
         ],

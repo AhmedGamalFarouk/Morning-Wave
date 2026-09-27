@@ -38,24 +38,36 @@ class _FakeAuth implements Auth {
   Future<void> signOut() async => isSignedIn = isParentAccount = false;
 }
 
+const _parentCode = 'KX7PQ2MA';
+const _childCode = 'HN4RT8WE';
+
 Membership _family(
   String parentName, {
   FamilyRole role = FamilyRole.child,
   bool parentJoined = true,
-  String code = _FakeFamilies.code,
+  String? newPhoneCode,
 }) => Membership(
   familyId: parentName,
   role: role,
   parentName: parentName,
-  inviteCode: code,
+  parentCode: parentJoined ? newPhoneCode : _parentCode,
+  childCode: _childCode,
   parentJoined: parentJoined,
 );
 
 class _FakeFamilies implements FamilyRepository {
-  static const code = '3F2A91BC';
-
   var mine = <Membership>[];
   var reachable = true;
+  var wrongCodes = 0;
+
+  /// The next request goes through but its answer is lost.
+  var loseNextAnswer = false;
+
+  void _maybeLoseAnswer() {
+    if (!loseNextAnswer) return;
+    loseNextAnswer = false;
+    throw Exception('connection lost');
+  }
 
   @override
   Future<List<Membership>> myFamilies() async {
@@ -64,14 +76,26 @@ class _FakeFamilies implements FamilyRepository {
   }
 
   @override
-  Future<void> createFamily({required String parentName}) async {
+  Future<void> createFamily({
+    required String parentName,
+    required String myName,
+  }) async {
     mine = [...mine, _family(parentName, parentJoined: false)];
+    _maybeLoseAnswer();
   }
 
+  /// Like the server: spaces, dashes and case don't matter, a wrong code
+  /// returns nothing, and a used parent code is gone.
   @override
-  Future<void> joinFamily(String typed) async {
-    if (normalizeInviteCode(typed) != code) throw const UnknownInviteCode();
-    mine = [_family('Mom', role: FamilyRole.parent)];
+  Future<void> joinFamily(String code, {required String myName}) async {
+    if (wrongCodes >= 10) throw const TooManyCodes();
+    final typed = code.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+    if (typed == _parentCode && mine.isEmpty) {
+      mine = [_family('Mom', role: FamilyRole.parent)];
+      return;
+    }
+    wrongCodes++;
+    throw const UnknownInviteCode();
   }
 
   @override
@@ -79,16 +103,31 @@ class _FakeFamilies implements FamilyRepository {
     mine = [
       for (final f in mine)
         f.familyId == familyId
-            ? _family(f.parentName, parentJoined: false, code: '7C0DE123')
+            ? _family(f.parentName, newPhoneCode: 'ZP3QW9CD')
             : f,
     ];
   }
 }
 
-Widget _app(Auth auth, FamilyRepository families) => MaterialApp(
-  theme: buildAppTheme(),
-  home: AppGate(auth: auth, families: families),
-);
+class _FakeCache implements FamilyCache {
+  List<Membership>? saved;
+
+  @override
+  Future<List<Membership>?> read() async => saved;
+
+  @override
+  Future<void> write(List<Membership>? families) async => saved = families;
+}
+
+Widget _app(Auth auth, FamilyRepository families, [FamilyCache? cache]) =>
+    MaterialApp(
+      theme: buildAppTheme(),
+      home: AppGate(
+        auth: auth,
+        families: families,
+        cache: cache ?? _FakeCache(),
+      ),
+    );
 
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {
@@ -101,6 +140,11 @@ Future<void> _tap(WidgetTester tester, String label) async {
   await tester.pump();
   await tester.tap(find.text(label));
   await _settle(tester);
+}
+
+Future<void> _typeCode(WidgetTester tester, String code) async {
+  await tester.enterText(find.byType(TextField), code);
+  await _tap(tester, 'Join my family');
 }
 
 void main() {
@@ -116,11 +160,12 @@ void main() {
       ..resetDevicePixelRatio();
   });
 
-  testWidgets('the child signs in, names Mom and sees the invite code', (
+  testWidgets('the child signs in, names Mom and sees her code', (
     tester,
   ) async {
-    final families = _FakeFamilies();
-    await tester.pumpWidget(_app(_FakeAuth(googleName: 'Sara'), families));
+    await tester.pumpWidget(
+      _app(_FakeAuth(googleName: 'Sara'), _FakeFamilies()),
+    );
 
     await _tap(tester, 'Continue with Google');
     expect(find.text('Hi Sara! Who are the good mornings from?'), findsOne);
@@ -130,8 +175,24 @@ void main() {
     await _tap(tester, 'Start our mornings');
 
     expect(find.text('Now, Mom’s phone'), findsOneWidget);
-    expect(find.text('3F2A 91BC'), findsOneWidget);
+    expect(find.text('KX7P Q2MA'), findsOneWidget);
     expect(find.text('Mom said good morning'), findsNothing);
+  });
+
+  testWidgets('a family made while the answer was lost isn’t made twice', (
+    tester,
+  ) async {
+    final families = _FakeFamilies()..loseNextAnswer = true;
+    final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
+    await tester.pumpWidget(_app(auth, families));
+    await _settle(tester);
+
+    await tester.tap(find.text('Mom'));
+    await tester.pump();
+    await _tap(tester, 'Start our mornings');
+
+    expect(find.text('Now, Mom’s phone'), findsOneWidget);
+    expect(families.mine, hasLength(1));
   });
 
   testWidgets('closing Google’s sheet stays on welcome', (tester) async {
@@ -147,8 +208,7 @@ void main() {
     await tester.pumpWidget(_app(auth, _FakeFamilies()));
 
     await _tap(tester, 'I have a code');
-    await tester.enterText(find.byType(TextField), '3f2a 91bc');
-    await _tap(tester, 'Join my family');
+    await _typeCode(tester, 'kx7p q2ma');
 
     expect(find.text('Good morning, Mom'), findsOneWidget);
     expect(auth.anonymousSignIns, 1);
@@ -159,34 +219,63 @@ void main() {
     await tester.pumpWidget(_app(auth, _FakeFamilies()));
 
     await _tap(tester, 'I have a code');
-    await tester.enterText(find.byType(TextField), '00000000');
-    await _tap(tester, 'Join my family');
+    await _typeCode(tester, 'AAAA AAAA');
     expect(find.textContaining('Check it with your family'), findsOneWidget);
     expect(
       find.textContaining(RegExp('wrong|invalid|error|fail')),
       findsNothing,
     );
 
-    await tester.enterText(find.byType(TextField), '3F2A91BC');
-    await _tap(tester, 'Join my family');
+    await _typeCode(tester, _parentCode);
     expect(find.text('Good morning, Mom'), findsOneWidget);
     // The same parent account is reused for the second try.
     expect(auth.anonymousSignIns, 1);
   });
 
-  testWidgets('a returning parent goes straight home', (tester) async {
+  testWidgets('a retry after a lost answer finds the parent already in', (
+    tester,
+  ) async {
     final auth = _FakeAuth()
       ..isSignedIn = true
       ..isParentAccount = true;
+    // The first try joined; its answer never arrived, so the code is used.
     final families = _FakeFamilies()
-      ..mine = [_family('Papa', role: FamilyRole.parent)];
-    await tester.pumpWidget(_app(auth, families));
+      ..mine = [_family('Mom', role: FamilyRole.parent)]
+      ..reachable = false;
+    await tester.pumpWidget(_app(auth, families, _FakeCache()..saved = []));
+    await _settle(tester);
+
+    families.reachable = true;
+    await _typeCode(tester, _parentCode);
+    expect(find.text('Good morning, Mom'), findsOneWidget);
+  });
+
+  testWidgets('many wrong codes ask for a break, kindly', (tester) async {
+    final families = _FakeFamilies()..wrongCodes = 10;
+    await tester.pumpWidget(_app(_FakeAuth(), families));
+
+    await _tap(tester, 'I have a code');
+    await _typeCode(tester, _parentCode);
+    expect(find.textContaining('take a little break'), findsOneWidget);
+  });
+
+  testWidgets('a returning parent goes straight home, even offline', (
+    tester,
+  ) async {
+    final auth = _FakeAuth()
+      ..isSignedIn = true
+      ..isParentAccount = true;
+    final families = _FakeFamilies()..reachable = false;
+    final cache = _FakeCache()
+      ..saved = [_family('Papa', role: FamilyRole.parent)];
+    await tester.pumpWidget(_app(auth, families, cache));
     await _settle(tester);
 
     expect(find.text('Good morning, Papa'), findsOneWidget);
+    expect(find.textContaining('can’t reach'), findsNothing);
   });
 
-  testWidgets('once Mom has joined, the child sees her morning', (
+  testWidgets('once Mom has joined, the child sees she’s set, not a morning', (
     tester,
   ) async {
     final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
@@ -194,8 +283,9 @@ void main() {
     await tester.pumpWidget(_app(auth, families));
     await _settle(tester);
 
-    expect(find.text('Mom said good morning'), findsOneWidget);
-    expect(find.text('3F2A 91BC'), findsNothing);
+    expect(find.text('Mom is all set'), findsOneWidget);
+    expect(find.text('Mom said good morning'), findsNothing);
+    expect(find.textContaining('HN4R T8WE'), findsOneWidget);
   });
 
   testWidgets('out of reach never leads a child to a second family', (
@@ -227,18 +317,27 @@ void main() {
     await tester.pump();
     await _tap(tester, 'Start our mornings');
 
-    expect(find.text('Mom said good morning'), findsOneWidget);
+    expect(find.text('Mom is all set'), findsOneWidget);
     expect(find.text('Now, Dad’s phone'), findsOneWidget);
   });
 
-  testWidgets('a new phone for Mom gets a fresh code', (tester) async {
+  testWidgets('a new phone for Mom asks first, then shows a fresh code', (
+    tester,
+  ) async {
     final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
     final families = _FakeFamilies()..mine = [_family('Mom')];
     await tester.pumpWidget(_app(auth, families));
     await _settle(tester);
 
     await _tap(tester, 'New phone for Mom?');
-    expect(find.text('7C0D E123'), findsOneWidget);
+    await _tap(tester, 'Not now');
+    expect(find.text('ZP3Q W9CD'), findsNothing);
+
+    await _tap(tester, 'New phone for Mom?');
+    await _tap(tester, 'Get a code');
+    // Mom stays in the family until the new phone joins.
+    expect(find.text('Mom is all set'), findsOneWidget);
+    expect(find.text('ZP3Q W9CD'), findsOneWidget);
   });
 
   testWidgets('back from a wrong code reaches Google sign-in again', (
@@ -248,8 +347,7 @@ void main() {
     await tester.pumpWidget(_app(auth, _FakeFamilies()));
 
     await _tap(tester, 'I have a code');
-    await tester.enterText(find.byType(TextField), '00000000');
-    await _tap(tester, 'Join my family');
+    await _typeCode(tester, 'AAAA AAAA');
     await _tap(tester, 'Back');
 
     expect(auth.isSignedIn, isFalse);
@@ -257,8 +355,18 @@ void main() {
     expect(find.text('Hi Sara! Who are the good mornings from?'), findsOne);
   });
 
-  test('codes are read without spaces, dashes, lower case or an O for 0', () {
-    expect(normalizeInviteCode(' 3f2a-9obc '), '3F2A90BC');
-    expect(displayInviteCode('3F2A91BC'), '3F2A 91BC');
+  testWidgets('Android’s back key leaves the code screen, not the app', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(_FakeAuth(), _FakeFamilies()));
+
+    await _tap(tester, 'I have a code');
+    await tester.binding.handlePopRoute();
+    await _settle(tester);
+    expect(find.text('Continue with Google'), findsOneWidget);
+  });
+
+  test('codes show in two groups of four', () {
+    expect(displayInviteCode('KX7PQ2MA'), 'KX7P Q2MA');
   });
 }

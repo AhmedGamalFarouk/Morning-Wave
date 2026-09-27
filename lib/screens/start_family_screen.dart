@@ -12,7 +12,11 @@ class StartFamilyScreen extends StatefulWidget {
     required this.onStart,
     this.childName,
     this.onBack,
+    this.onHaveCode,
   });
+
+  /// For a brother or sister joining a family that already exists.
+  final VoidCallback? onHaveCode;
 
   /// Null once the family exists; otherwise a line to show.
   final Future<String?> Function(String parentName) onStart;
@@ -132,16 +136,6 @@ class _StartFamilyScreenState extends State<StartFamilyScreen> {
                     style: text.headlineSmall,
                     decoration: const InputDecoration(
                       labelText: 'Or their name',
-                      filled: true,
-                      fillColor: Palette.paper,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                        borderSide: BorderSide(color: Palette.peach),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                        borderSide: BorderSide(color: Palette.peach),
-                      ),
                     ),
                   ),
                   if (_hint != null) ...[
@@ -158,6 +152,13 @@ class _StartFamilyScreenState extends State<StartFamilyScreen> {
                         : _start,
                     child: Text(_busy ? 'One moment…' : 'Start our mornings'),
                   ),
+                  if (widget.onHaveCode != null) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _busy ? null : widget.onHaveCode,
+                      child: const Text('I have a code from my family'),
+                    ),
+                  ],
                 ],
               ),
             ),

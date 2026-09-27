@@ -1,27 +1,52 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum FamilyRole { parent, child }
 
-/// The signed-in person's place in their family.
+/// The signed-in person's place in one family.
 class Membership {
   const Membership({
     required this.familyId,
     required this.role,
     required this.parentName,
-    required this.inviteCode,
+    required this.childCode,
     required this.parentJoined,
+    this.parentCode,
   });
 
   final String familyId;
   final FamilyRole role;
 
-  /// What the family calls the parent ("Mom"): the family's name. The
-  /// parent is greeted by it.
+  /// What the children call the parent ("Mom"); the parent is greeted by it.
   final String parentName;
 
-  /// Shown to the child until the parent's phone has joined.
-  final String inviteCode;
+  /// Lets the parent's phone in once. Null after it's used, until a child
+  /// asks for a new one for a reinstalled or new phone.
+  final String? parentCode;
+
+  /// Lets brothers and sisters join, any number of times.
+  final String childCode;
   final bool parentJoined;
+
+  Map<String, Object?> toJson() => {
+    'familyId': familyId,
+    'role': role.name,
+    'parentName': parentName,
+    'parentCode': parentCode,
+    'childCode': childCode,
+    'parentJoined': parentJoined,
+  };
+
+  factory Membership.fromJson(Map<String, dynamic> json) => Membership(
+    familyId: json['familyId'] as String,
+    role: FamilyRole.values.byName(json['role'] as String),
+    parentName: json['parentName'] as String,
+    parentCode: json['parentCode'] as String?,
+    childCode: json['childCode'] as String,
+    parentJoined: json['parentJoined'] as bool,
+  );
 }
 
 /// Thrown when an invite code doesn't lead to a family.
@@ -29,30 +54,36 @@ class UnknownInviteCode implements Exception {
   const UnknownInviteCode();
 }
 
+/// Thrown after too many codes that didn't lead to a family.
+class TooManyCodes implements Exception {
+  const TooManyCodes();
+}
+
 /// Every call the app makes about families. The database functions
-/// `create_family` and `join_family` own the rules; this only calls them.
+/// `create_family`, `join_family` and `reinvite_parent` own the rules; this
+/// only calls them.
 abstract interface class FamilyRepository {
   /// Empty until the person creates or joins a family. A grown child can
   /// be in several: one per parent, when parents live apart.
   Future<List<Membership>> myFamilies();
 
-  Future<void> createFamily({required String parentName});
+  Future<void> createFamily({
+    required String parentName,
+    required String myName,
+  });
 
-  /// Throws [UnknownInviteCode] when no family has [code].
-  Future<void> joinFamily(String code);
+  /// The code decides the role. Throws [UnknownInviteCode] or [TooManyCodes].
+  Future<void> joinFamily(String code, {required String myName});
 
-  /// A fresh code for the parent's reinstalled or new phone. Joining with
-  /// it moves the parent's place in the family to that phone.
+  /// A fresh parent code for a reinstalled or new phone. The parent stays in
+  /// the family until the new phone joins with it.
   Future<void> newParentCode(String familyId);
 }
 
 class SupabaseFamilyRepository implements FamilyRepository {
-  SupabaseFamilyRepository(this._db, {this.childName});
+  SupabaseFamilyRepository(this._db);
 
   final SupabaseClient _db;
-
-  /// How the child appears to the family, from their Google account.
-  final String? Function()? childName;
 
   @override
   Future<List<Membership>> myFamilies() async {
@@ -60,53 +91,39 @@ class SupabaseFamilyRepository implements FamilyRepository {
     if (userId == null) return const [];
     final rows = await _db
         .from('members')
-        .select('role, families(id, name, invite_code, members(role))')
+        .select(
+          'role, families(id, parent_name, parent_code, child_code, '
+          'members(role))',
+        )
         .eq('user_id', userId)
         .order('created_at');
     return rows.map(_membership).toList();
   }
 
-  /// The family is named for the parent ("Mom"), so the name the child
-  /// picks is the one the parent is greeted by.
   @override
-  Future<void> createFamily({required String parentName}) async {
+  Future<void> createFamily({
+    required String parentName,
+    required String myName,
+  }) async {
     await _db.rpc(
       'create_family',
-      params: {
-        'family_name': parentName,
-        'my_name': childName?.call() ?? 'Family',
-      },
+      params: {'parent_name': parentName, 'my_name': myName},
     );
   }
 
   @override
-  Future<void> joinFamily(String code) async {
+  Future<void> joinFamily(String code, {required String myName}) async {
+    final Object? family;
     try {
-      final family = await _db.rpc(
+      family = await _db.rpc(
         'join_family',
-        params: {
-          'code': normalizeInviteCode(code),
-          'my_role': FamilyRole.parent.name,
-          // The parent never types a name; they take the family's below.
-          'my_name': 'Parent',
-        },
+        params: {'code': code, 'my_name': myName},
       );
-      await _db
-          .from('members')
-          .update({'display_name': family['name']})
-          .eq('user_id', _db.auth.currentUser!.id);
     } on PostgrestException catch (error) {
-      switch (error.code) {
-        // No family has this code.
-        case 'P0002':
-          throw const UnknownInviteCode();
-        // Already in this family, for example after a lost connection.
-        case '23505':
-          break;
-        default:
-          rethrow;
-      }
+      if (error.code == 'PT429') throw const TooManyCodes();
+      rethrow;
     }
+    if (family == null) throw const UnknownInviteCode();
   }
 
   @override
@@ -120,18 +137,49 @@ class SupabaseFamilyRepository implements FamilyRepository {
     return Membership(
       familyId: family['id'] as String,
       role: FamilyRole.values.byName(row['role'] as String),
-      parentName: family['name'] as String,
-      inviteCode: family['invite_code'] as String,
+      parentName: family['parent_name'] as String,
+      parentCode: family['parent_code'] as String?,
+      childCode: family['child_code'] as String,
       parentJoined: roles.contains(FamilyRole.parent.name),
     );
   }
 }
 
-/// Codes are 8 hex characters. People read them aloud and type them with
-/// spaces or dashes, and an O where the code has a zero.
-String normalizeInviteCode(String typed) =>
-    typed.replaceAll(RegExp(r'[\s-]'), '').toUpperCase().replaceAll('O', '0');
+/// The last families seen, so the app opens straight to the right home
+/// even before the network answers.
+abstract interface class FamilyCache {
+  Future<List<Membership>?> read();
+  Future<void> write(List<Membership>? families);
+}
 
-/// "3F2A91BC" shown as "3F2A 91BC", easier to read out over the phone.
+class PrefsFamilyCache implements FamilyCache {
+  static const _key = 'families';
+
+  @override
+  Future<List<Membership>?> read() async {
+    final json = (await SharedPreferences.getInstance()).getString(_key);
+    if (json == null) return null;
+    return [
+      for (final item in jsonDecode(json) as List)
+        Membership.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> write(List<Membership>? families) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (families == null) {
+      await prefs.remove(_key);
+    } else {
+      await prefs.setString(
+        _key,
+        jsonEncode([for (final f in families) f.toJson()]),
+      );
+    }
+  }
+}
+
+/// "KX7PQ2MA" shown as "KX7P Q2MA", easier to read out over the phone. The
+/// server ignores spaces, dashes and case, so what's typed is sent as is.
 String displayInviteCode(String code) =>
     code.length == 8 ? '${code.substring(0, 4)} ${code.substring(4)}' : code;

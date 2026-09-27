@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -28,6 +32,12 @@ class SupabaseAuth implements Auth {
   final GoTrueClient _auth;
   Future<void>? _googleReady;
 
+  /// Google puts the hash of this in the ID token and Supabase checks it
+  /// against the raw value, so a stolen token can't be replayed elsewhere.
+  final _nonce = base64Url.encode(
+    List.generate(24, (_) => Random.secure().nextInt(256)),
+  );
+
   @override
   bool get isSignedIn => _auth.currentUser != null;
 
@@ -37,7 +47,8 @@ class SupabaseAuth implements Auth {
   @override
   String? get childFirstName {
     final name = _auth.currentUser?.userMetadata?['full_name'] as String?;
-    return name?.trim().split(' ').first;
+    if (name == null || name.trim().isEmpty) return null;
+    return name.trim().split(' ').first;
   }
 
   @override
@@ -47,6 +58,7 @@ class SupabaseAuth implements Auth {
     try {
       await (_googleReady ??= google.initialize(
         serverClientId: AppConfig.googleWebClientId,
+        nonce: sha256.convert(utf8.encode(_nonce)).toString(),
       ));
     } catch (_) {
       _googleReady = null;
@@ -64,6 +76,7 @@ class SupabaseAuth implements Auth {
     await _auth.signInWithIdToken(
       provider: OAuthProvider.google,
       idToken: idToken,
+      nonce: _nonce,
     );
     return true;
   }

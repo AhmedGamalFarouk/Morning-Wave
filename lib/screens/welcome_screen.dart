@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
@@ -50,6 +51,7 @@ class WelcomeScreen extends StatelessWidget {
               line: 'Type it in once and you’re all set.',
               action: 'I have a code',
               onPressed: busy ? null : onHaveCode,
+              forParent: true,
             ),
             const SizedBox(height: 20),
             _Path(
@@ -71,12 +73,16 @@ class _Path extends StatelessWidget {
     required this.line,
     required this.action,
     required this.onPressed,
+    this.forParent = false,
   });
 
   final String title;
   final String line;
   final String action;
   final VoidCallback? onPressed;
+
+  /// The parent's path gets the parent-side 28sp primary action.
+  final bool forParent;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +95,11 @@ class _Path extends StatelessWidget {
           const SizedBox(height: 8),
           Text(line, style: text.bodyMedium?.copyWith(color: Palette.inkSoft)),
           const SizedBox(height: 20),
-          FilledButton(onPressed: onPressed, child: Text(action)),
+          FilledButton(
+            onPressed: onPressed,
+            style: forParent ? parentPrimaryButton(context) : null,
+            child: Text(action),
+          ),
         ],
       ),
     );

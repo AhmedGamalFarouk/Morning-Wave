@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
@@ -103,27 +104,9 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                       textInputAction: TextInputAction.go,
                       onSubmitted: (_) => _join(),
                       style: text.displayMedium?.copyWith(letterSpacing: 4),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Family code',
-                        labelStyle: text.bodyMedium,
                         floatingLabelAlignment: FloatingLabelAlignment.center,
-                        filled: true,
-                        fillColor: Palette.paper,
-                        border: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          borderSide: BorderSide(color: Palette.peach),
-                        ),
-                        enabledBorder: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          borderSide: BorderSide(color: Palette.peach),
-                        ),
-                        focusedBorder: const OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          borderSide: BorderSide(
-                            color: Palette.sunEdge,
-                            width: 2,
-                          ),
-                        ),
                       ),
                     ),
                   ),
@@ -140,10 +123,7 @@ class _JoinFamilyScreenState extends State<JoinFamilyScreen> {
                     onPressed: _busy || _code.text.trim().isEmpty
                         ? null
                         : _join,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(64, 72),
-                      textStyle: text.headlineMedium,
-                    ),
+                    style: parentPrimaryButton(context),
                     child: Text(_busy ? 'One moment…' : 'Join my family'),
                   ),
                 ],

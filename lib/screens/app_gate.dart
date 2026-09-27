@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../family/auth.dart';
 import '../family/family_repository.dart';
+import '../placeholder/family.dart';
+import '../theme/app_theme.dart';
+import '../theme/motion.dart';
 import '../widgets/sun_painter.dart';
 import 'child_home_screen.dart';
 import 'join_family_screen.dart';
@@ -9,19 +12,21 @@ import 'parent_home_screen.dart';
 import 'start_family_screen.dart';
 import 'welcome_screen.dart';
 
-/// Picks the screen from who is signed in and which family they're in:
-/// welcome, the parent's code, the child's family setup, or a home.
+/// Picks the screen from who is signed in and which families they're in:
+/// welcome, a family code, the child's family setup, or a home.
 class AppGate extends StatefulWidget {
   const AppGate({
     super.key,
     required this.auth,
     required this.families,
+    required this.cache,
     this.requestNotificationPermission,
     this.notificationsEnabled,
   });
 
   final Auth auth;
   final FamilyRepository families;
+  final FamilyCache cache;
   final Future<bool> Function()? requestNotificationPermission;
   final Future<bool> Function()? notificationsEnabled;
 
@@ -34,7 +39,7 @@ const _cantReach =
     'We can’t reach Morning Wave just now. Try again in a moment.';
 
 class _AppGateState extends State<AppGate> {
-  /// Null until loaded; empty when the person isn't in a family yet.
+  /// Null until known; empty when the person isn't in a family yet.
   List<Membership>? _families;
   var _loading = false;
   var _unreachable = false;
@@ -42,24 +47,47 @@ class _AppGateState extends State<AppGate> {
   var _enteringCode = false;
   var _addingParent = false;
 
+  Auth get _auth => widget.auth;
+
+  /// How this person appears to the rest of the family.
+  String get _myName => _auth.childFirstName ?? 'Family';
+
   @override
   void initState() {
     super.initState();
-    if (widget.auth.isSignedIn) _load();
+    if (_auth.isSignedIn) _start();
   }
 
-  Future<void> _load() async {
+  /// Opens on the families seen last time, then checks in the background,
+  /// so a parent with no signal still lands on their Morning Sun.
+  Future<void> _start() async {
+    setState(() => _loading = true);
+    List<Membership>? cached;
+    try {
+      cached = await widget.cache.read();
+    } catch (error) {
+      debugPrint('Reading saved families: $error');
+    }
+    if (!mounted) return;
     setState(() {
-      _loading = _families == null;
-      _unreachable = false;
+      _families = cached;
+      _loading = cached == null;
     });
+    await _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _unreachable = false);
     try {
       final families = await widget.families.myFamilies();
-      if (mounted) setState(() => _families = families);
+      if (!mounted) return;
+      setState(() => _families = families);
+      await widget.cache.write(families);
     } catch (error) {
-      debugPrint('Loading the family: $error');
-      // Without knowing the family, setup could make a second one.
-      if (mounted) setState(() => _unreachable = true);
+      debugPrint('Loading families: $error');
+      // Without knowing the families, setup could make a duplicate. With
+      // saved ones, keep showing them and say nothing.
+      if (mounted && _families == null) setState(() => _unreachable = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -73,7 +101,10 @@ class _AppGateState extends State<AppGate> {
   Future<void> _continueWithGoogle() async {
     setState(() => _signingIn = true);
     try {
-      if (await widget.auth.signInWithGoogle()) await _load();
+      if (await _auth.signInWithGoogle()) {
+        setState(() => _loading = true);
+        await _refresh();
+      }
     } catch (error) {
       debugPrint('Google sign-in: $error');
       _say('Google sign-in didn’t finish. Try again?');
@@ -84,48 +115,72 @@ class _AppGateState extends State<AppGate> {
 
   Future<String?> _join(String code) async {
     try {
-      await widget.auth.signInAsParent();
-      await widget.families.joinFamily(code);
-      await _load();
-      return null;
+      await _auth.signInAsParent();
+      await widget.families.joinFamily(code, myName: _myName);
     } on UnknownInviteCode {
+      // A retry after a lost answer also lands here: the first try may
+      // have joined already.
+      if (await _joinedSince(0)) return null;
       return 'That code isn’t one we know yet. Check it with your family '
           'and try once more.';
+    } on TooManyCodes {
+      return 'Let’s take a little break. Try the code again in an hour.';
     } catch (error) {
       debugPrint('Joining a family: $error');
       return _cantReach;
     }
+    await _refresh();
+    if (!mounted) return null;
+    setState(() => _enteringCode = false);
+    return null;
   }
 
-  /// From the code screen back to welcome. A parent account that never
-  /// joined a family is dropped, so a child who tapped the wrong path can
-  /// still reach Google sign-in.
-  Future<void> _leaveCode() async {
-    if (widget.auth.isSignedIn) await widget.auth.signOut();
-    if (mounted) {
+  /// True when a fresh look finds more than [before] families, so a request
+  /// whose answer was lost isn't repeated.
+  Future<bool> _joinedSince(int before) async {
+    await _refresh();
+    final found = (_families?.length ?? 0) > before;
+    if (found && mounted) {
       setState(() {
         _enteringCode = false;
-        _families = null;
+        _addingParent = false;
       });
     }
+    return found;
+  }
+
+  /// Back from the code screen. A parent account that never joined a family
+  /// is dropped, so a child who took the wrong path can still reach Google.
+  Future<void> _leaveCode() async {
+    if (_auth.isParentAccount && (_families?.isEmpty ?? true)) {
+      await _auth.signOut();
+      await widget.cache.write(null);
+      if (!mounted) return;
+      setState(() => _families = null);
+    }
+    setState(() => _enteringCode = false);
   }
 
   Future<String?> _startFamily(String parentName) async {
+    final before = _families?.length ?? 0;
     try {
-      await widget.families.createFamily(parentName: parentName);
-      await _load();
-      if (mounted) setState(() => _addingParent = false);
-      return null;
+      await widget.families.createFamily(
+        parentName: parentName,
+        myName: _myName,
+      );
     } catch (error) {
       debugPrint('Creating a family: $error');
-      return _cantReach;
+      // The family may exist even though the answer never arrived.
+      return await _joinedSince(before) ? null : _cantReach;
     }
+    await _joinedSince(before);
+    return null;
   }
 
   Future<void> _newParentCode(Membership family) async {
     try {
       await widget.families.newParentCode(family.familyId);
-      await _load();
+      await _refresh();
     } catch (error) {
       debugPrint('New parent code: $error');
       _say(_cantReach);
@@ -134,50 +189,94 @@ class _AppGateState extends State<AppGate> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const _Dawn();
-    if (_unreachable) return _Dawn(onRetry: _load);
+    final (key, screen, back) = _screen();
+    return PopScope(
+      // Android's back key does what the on-screen Back does.
+      canPop: back == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) back?.call();
+      },
+      child: AnimatedSwitcher(
+        duration: Motion.crossfade,
+        switchInCurve: Motion.fadeIn,
+        switchOutCurve: Motion.fadeOut,
+        child: KeyedSubtree(key: ValueKey(key), child: screen),
+      ),
+    );
+  }
+
+  /// The screen to show, a key for crossfading, and what Back does.
+  (String, Widget, VoidCallback?) _screen() {
+    if (_loading) return ('dawn', const _Dawn(), null);
+    if (_unreachable) return ('retry', _Dawn(onRetry: _start), null);
     final families = _families ?? const [];
     final parentOf = families.where((f) => f.role == FamilyRole.parent);
     if (parentOf.isNotEmpty) {
-      return ParentHomeScreen(
-        parentName: parentOf.first.parentName,
-        requestNotificationPermission: widget.requestNotificationPermission,
-        notificationsEnabled: widget.notificationsEnabled,
+      return (
+        'parent',
+        ParentHomeScreen(
+          parentName: parentOf.first.parentName,
+          requestNotificationPermission: widget.requestNotificationPermission,
+          notificationsEnabled: widget.notificationsEnabled,
+        ),
+        null,
       );
     }
-    final signedInChild =
-        widget.auth.isSignedIn && !widget.auth.isParentAccount;
-    if (signedInChild && (families.isEmpty || _addingParent)) {
-      return StartFamilyScreen(
-        childName: widget.auth.childFirstName,
-        onStart: _startFamily,
-        onBack: families.isEmpty
-            ? null
-            : () => setState(() => _addingParent = false),
+    if (_enteringCode || (_auth.isParentAccount && families.isEmpty)) {
+      return (
+        'code',
+        JoinFamilyScreen(onJoin: _join, onBack: _leaveCode),
+        _leaveCode,
       );
     }
-    if (signedInChild) {
-      return ChildHomeScreen(
-        childName: widget.auth.childFirstName,
-        parents: [
-          for (final family in families)
-            (
-              name: family.parentName,
-              inviteCode: family.parentJoined ? null : family.inviteCode,
-              onNewPhone: () => _newParentCode(family),
-            ),
-        ],
-        onAddParent: () => setState(() => _addingParent = true),
-        onRefresh: _load,
+    final googleChild = _auth.isSignedIn && !_auth.isParentAccount;
+    if (googleChild && (families.isEmpty || _addingParent)) {
+      final back = families.isEmpty
+          ? null
+          : () => setState(() => _addingParent = false);
+      return (
+        'start',
+        StartFamilyScreen(
+          childName: _auth.childFirstName,
+          onStart: _startFamily,
+          onBack: back,
+          onHaveCode: () => setState(() => _enteringCode = true),
+        ),
+        back,
       );
     }
-    if (_enteringCode || widget.auth.isSignedIn) {
-      return JoinFamilyScreen(onJoin: _join, onBack: _leaveCode);
+    if (families.isNotEmpty) {
+      return (
+        'child',
+        ChildHomeScreen(
+          view: ChildView.connected,
+          childName: _auth.childFirstName,
+          parents: [
+            for (final family in families)
+              (
+                name: family.parentName,
+                joined: family.parentJoined,
+                parentCode: family.parentCode,
+                childCode: family.childCode,
+                onNewPhone: () => _newParentCode(family),
+              ),
+          ],
+          onAddParent: googleChild
+              ? () => setState(() => _addingParent = true)
+              : null,
+          onRefresh: _refresh,
+        ),
+        null,
+      );
     }
-    return WelcomeScreen(
-      busy: _signingIn,
-      onSetUpForParent: _continueWithGoogle,
-      onHaveCode: () => setState(() => _enteringCode = true),
+    return (
+      'welcome',
+      WelcomeScreen(
+        busy: _signingIn,
+        onSetUpForParent: _continueWithGoogle,
+        onHaveCode: () => setState(() => _enteringCode = true),
+      ),
+      null,
     );
   }
 }
@@ -211,6 +310,7 @@ class _Dawn extends StatelessWidget {
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: onRetry,
+                    style: parentPrimaryButton(context),
                     child: const Text('Try again'),
                   ),
                 ],

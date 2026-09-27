@@ -75,13 +75,10 @@ class MorningWaveApp extends StatelessWidget {
 
 Widget _signedInApp() {
   final client = Supabase.instance.client;
-  final auth = SupabaseAuth(client.auth);
   return AppGate(
-    auth: auth,
-    families: SupabaseFamilyRepository(
-      client,
-      childName: () => auth.childFirstName,
-    ),
+    auth: SupabaseAuth(client.auth),
+    families: SupabaseFamilyRepository(client),
+    cache: PrefsFamilyCache(),
     requestNotificationPermission: Notifications.requestPermission,
     notificationsEnabled: Notifications.areEnabled,
   );
