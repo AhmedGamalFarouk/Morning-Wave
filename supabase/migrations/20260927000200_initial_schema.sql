@@ -65,7 +65,7 @@ create table public.families (
 -- Members -------------------------------------------------------------------
 -- Escalation order among children is join order (created_at): the first child
 -- is the primary contact, the next one the 2nd contact. Email addresses stay
--- in auth.users.
+-- in members.email, readable by the server only.
 
 create table public.members (
   id           uuid primary key default gen_random_uuid(),
@@ -73,6 +73,7 @@ create table public.members (
   user_id      uuid not null references auth.users on delete cascade,
   role         text not null check (role in ('parent', 'child')),
   display_name text not null check (char_length(display_name) between 1 and 60),
+  email        text,  -- server-only (no column grant), for the step 4 email
   fcm_token    text,
   created_at   timestamptz not null default now(),
   unique (family_id, user_id),
@@ -245,8 +246,8 @@ begin
     raise exception 'sign in to start a family' using errcode = '42501';
   end if;
   insert into public.families (parent_name) values (trim(create_family.parent_name)) returning * into fam;
-  insert into public.members (family_id, user_id, role, display_name)
-  values (fam.id, auth.uid(), 'child', my_name);
+  insert into public.members (family_id, user_id, role, display_name, email)
+  values (fam.id, auth.uid(), 'child', my_name, auth.jwt() ->> 'email');
   insert into public.schedules (family_id, time_zone) values (fam.id, create_family.time_zone);
   return fam;
 end
@@ -298,8 +299,8 @@ begin
     if private.is_anonymous() then
       raise exception 'sign in to join as a family member' using errcode = '42501';
     end if;
-    insert into public.members (family_id, user_id, role, display_name)
-    values (fam.id, me, 'child', my_name);
+    insert into public.members (family_id, user_id, role, display_name, email)
+    values (fam.id, me, 'child', my_name, auth.jwt() ->> 'email');
     return next fam;
     return;
   end if;
