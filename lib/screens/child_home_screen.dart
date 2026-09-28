@@ -238,7 +238,6 @@ class _ParentHeroState extends State<_ParentHero> {
     );
   }
 
-  // TODO(before closed test): open the phone dialer with Mom's number.
   /// The old phone stops once the new one joins, so ask first.
   Future<void> _confirmNewPhone() async {
     final parent = widget.parent.name;
@@ -264,12 +263,6 @@ class _ParentHeroState extends State<_ParentHero> {
       ),
     );
     if (yes ?? false) widget.parent.onNewPhone!();
-  }
-
-  void _call() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Calling isn’t set up yet.')));
   }
 
   @override
@@ -341,13 +334,6 @@ class _ParentHeroState extends State<_ParentHero> {
               onPressed: _loveSent ? null : _sendLove,
               icon: const HeartMark(color: Palette.peach),
               label: WholeWordsText(_loveSent ? 'Love sent' : 'Send love'),
-            ),
-          ],
-          if (widget.view == ChildView.waiting) ...[
-            const SizedBox(height: 28),
-            FilledButton(
-              onPressed: _call,
-              child: WholeWordsText('Call $parent'),
             ),
           ],
           if (newPhoneCode != null) ...[
