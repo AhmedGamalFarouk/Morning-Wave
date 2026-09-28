@@ -38,6 +38,10 @@ class RevenueCatSubscriptionService implements SubscriptionService {
   final String _apiKey;
   final _entitled = ValueNotifier<bool>(false);
 
+  /// Cached by [loadOffer] and reused by [purchase], so tapping "Start the
+  /// family plan" doesn't re-fetch offerings the paywall already loaded.
+  Package? _package;
+
   @override
   ValueListenable<bool> get isEntitled => _entitled;
 
@@ -61,8 +65,8 @@ class RevenueCatSubscriptionService implements SubscriptionService {
   Future<PlanOffer?> loadOffer() async {
     try {
       final offerings = await Purchases.getOfferings();
-      final product = offerings.current?.availablePackages.firstOrNull
-          ?.storeProduct;
+      _package = offerings.current?.availablePackages.firstOrNull;
+      final product = _package?.storeProduct;
       if (product == null) return null;
       return (
         priceString: product.priceString,
@@ -76,8 +80,9 @@ class RevenueCatSubscriptionService implements SubscriptionService {
 
   @override
   Future<void> purchase() async {
-    final offerings = await Purchases.getOfferings();
-    final package = offerings.current?.availablePackages.firstOrNull;
+    final package =
+        _package ??
+        (await Purchases.getOfferings()).current?.availablePackages.firstOrNull;
     if (package == null) {
       throw StateError('The family plan isn’t set up yet.');
     }

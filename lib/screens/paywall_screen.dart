@@ -38,14 +38,22 @@ class _PaywallScreenState extends State<PaywallScreen> {
     });
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<void> _run(
+    Future<void> Function() action, {
+    String Function()? whenDone,
+  }) async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
       await action();
+      if (mounted && whenDone != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(whenDone())));
+      }
     } catch (error) {
+      debugPrint('Family plan: $error');
       if (mounted) {
         setState(
           () => _error = 'That didn’t go through. Give it another try?',
@@ -56,6 +64,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  String _restoreMessage() => widget.subscription.isEntitled.value
+      ? 'Found it — the family plan is active.'
+      : 'No past purchase found on this account.';
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +148,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
                     child: TextButton(
                       onPressed: _busy
                           ? null
-                          : () => _run(widget.subscription.restore),
+                          : () => _run(
+                              widget.subscription.restore,
+                              whenDone: _restoreMessage,
+                            ),
                       child: const Text('Restore a purchase'),
                     ),
                   ),
