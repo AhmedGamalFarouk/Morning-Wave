@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../family/checkin_repository.dart';
 import '../placeholder/family.dart';
 import '../theme/motion.dart';
 import '../theme/palette.dart';
@@ -25,6 +26,10 @@ class ParentHomeScreen extends StatefulWidget {
     this.parentName = PlaceholderFamily.parentName,
     this.latestPhotoUrl,
     this.latestVoiceNoteUrl,
+    this.loadStatus,
+    this.onSayGoodMorning,
+    this.onGoAway,
+    this.onReturnHome,
   });
 
   final ParentMorning initial;
@@ -40,6 +45,22 @@ class ParentHomeScreen extends StatefulWidget {
   /// Fetches a URL for the family's newest voice note, or null if they
   /// haven't sent one yet. Null hides the fetch and the play button.
   final Future<String?> Function()? latestVoiceNoteUrl;
+
+  /// Reads today's real check-in and away state, once, when the screen
+  /// opens. Overrides [initial]. Null keeps [initial] as given, as in the
+  /// design preview.
+  final Future<FamilyStatus?> Function()? loadStatus;
+
+  /// Records today's good morning once the undo window passes. Null keeps
+  /// the tap local only, as in the design preview.
+  final Future<void> Function()? onSayGoodMorning;
+
+  /// Tells the family the parent will be away through the chosen day. Null
+  /// keeps "Going somewhere?" local only.
+  final Future<void> Function(DateTime backOn)? onGoAway;
+
+  /// Tells the family the parent is back. Null keeps "I'm back" local only.
+  final Future<void> Function()? onReturnHome;
 
   /// Asked only after the first good morning, behind a warm invitation,
   /// never as a system dialog on first open.
@@ -74,6 +95,23 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     ) {
       if (enabled && mounted) setState(() => _notesAsked = true);
     });
+    widget.loadStatus
+        ?.call()
+        .catchError((Object error) {
+          debugPrint('Loading today’s check-in: $error');
+          return null;
+        })
+        .then((status) {
+          if (status == null || !mounted) return;
+          setState(() {
+            _backOn = status.awayUntil;
+            _morning = status.away
+                ? ParentMorning.away
+                : status.checkedInToday
+                ? ParentMorning.sent
+                : ParentMorning.ready;
+          });
+        });
   }
 
   @override
@@ -92,7 +130,19 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     _set(ParentMorning.sent);
     _undoTimer = Timer(ParentHomeScreen.undoWindow, () {
       if (mounted) setState(() => _undoTimer = null);
+      widget.onSayGoodMorning?.call().catchError((Object error) {
+        debugPrint('Recording a good morning: $error');
+      });
     });
+  }
+
+  Future<void> _returnHome() async {
+    _set(ParentMorning.ready);
+    try {
+      await widget.onReturnHome?.call();
+    } catch (error) {
+      debugPrint('Clearing away mode: $error');
+    }
   }
 
   void _answerNotes({required bool allow}) {
@@ -111,6 +161,11 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     if (backOn == null) return;
     _backOn = backOn;
     _set(ParentMorning.away);
+    try {
+      await widget.onGoAway?.call(backOn);
+    } catch (error) {
+      debugPrint('Setting away mode: $error');
+    }
   }
 
   @override
@@ -153,7 +208,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                   label: 'I’m\nback',
                   semanticLabel: 'Tell your family you’re back',
                   warmth: 0.55,
-                  onPressed: () => _set(ParentMorning.ready),
+                  onPressed: _returnHome,
                 ),
               },
             ),
