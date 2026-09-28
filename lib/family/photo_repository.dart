@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Family photos: a child sends one, the parent sees the latest in their
@@ -33,7 +32,9 @@ class SupabasePhotoRepository implements PhotoRepository {
     required Uint8List jpegBytes,
   }) async {
     final userId = _db.auth.currentUser?.id;
-    if (userId == null) return;
+    if (userId == null) {
+      throw StateError('Sign in to send a photo.');
+    }
     final member = await _db
         .from('members')
         .select('id')
@@ -42,6 +43,14 @@ class SupabasePhotoRepository implements PhotoRepository {
         .eq('role', 'child')
         .single();
     final memberId = member['id'] as String;
+
+    // Only the newest photo is ever shown, so the older ones are cleared
+    // out rather than left to run up the storage bill.
+    final older = await _db
+        .from('family_photos')
+        .select('id, storage_path')
+        .eq('family_id', familyId);
+
     final path = '$familyId/${DateTime.now().microsecondsSinceEpoch}.jpg';
     await _db.storage
         .from(_bucket)
@@ -55,6 +64,22 @@ class SupabasePhotoRepository implements PhotoRepository {
       'member_id': memberId,
       'storage_path': path,
     });
+
+    if (older.isNotEmpty) {
+      try {
+        await _db.storage
+            .from(_bucket)
+            .remove([for (final row in older) row['storage_path'] as String]);
+        await _db
+            .from('family_photos')
+            .delete()
+            .inFilter('id', [for (final row in older) row['id'] as String]);
+      } catch (error) {
+        // The new photo is already sent; a leftover old one just means one
+        // extra object until the next send cleans it up.
+        debugPrint('Clearing older family photos: $error');
+      }
+    }
   }
 
   @override

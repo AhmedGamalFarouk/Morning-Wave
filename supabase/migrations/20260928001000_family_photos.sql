@@ -5,8 +5,10 @@
 -- same way).
 
 -- Storage: one private bucket, one object per photo, path "{family_id}/{id}".
-insert into storage.buckets (id, name, public)
-values ('family-photos', 'family-photos', false)
+-- Capped at 5 MB (the client compresses well under that) and JPEG-only, so
+-- one stray upload can't eat the $25 storage budget.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('family-photos', 'family-photos', false, 5242880, array['image/jpeg'])
 on conflict (id) do nothing;
 
 create policy "members read their family's photos in storage"
@@ -21,6 +23,18 @@ create policy "members read their family's photos in storage"
 create policy "a child uploads a family photo"
   on storage.objects for insert to authenticated
   with check (
+    bucket_id = 'family-photos'
+    and (storage.foldername(name))[1]::uuid in (
+      select family_id from public.members
+      where user_id = (select auth.uid()) and role = 'child'
+    )
+  );
+
+-- The client keeps only the newest photo per family (see send() in
+-- lib/family/photo_repository.dart), so a child can clear out older ones.
+create policy "a child deletes a family photo"
+  on storage.objects for delete to authenticated
+  using (
     bucket_id = 'family-photos'
     and (storage.foldername(name))[1]::uuid in (
       select family_id from public.members
@@ -46,6 +60,7 @@ alter table public.family_photos enable row level security;
 revoke select, insert, update, delete on public.family_photos from anon, authenticated;
 grant select on public.family_photos to authenticated;
 grant insert (family_id, member_id, storage_path) on public.family_photos to authenticated;
+grant delete on public.family_photos to authenticated;
 
 create policy "members read their family's photos"
   on public.family_photos for select to authenticated
@@ -58,3 +73,12 @@ create policy "a child sends a family photo"
   on public.family_photos for insert to authenticated
   with check (member_id in (select id from public.members
                             where user_id = (select auth.uid()) and role = 'child'));
+
+-- The client keeps only the newest photo per family, so a child can clear
+-- out the older rows (any child, not just whoever sent them).
+create policy "a child clears their family's older photos"
+  on public.family_photos for delete to authenticated
+  using (family_id in (
+    select family_id from public.members
+    where user_id = (select auth.uid()) and role = 'child'
+  ));
