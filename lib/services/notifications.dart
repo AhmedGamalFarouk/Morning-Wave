@@ -99,10 +99,7 @@ class Notifications {
           // expands to the full note, so nothing is ever cut off.
           styleInformation: body == null
               ? null
-              : BigTextStyleInformation(
-                  body,
-                  contentTitle: notification.title,
-                ),
+              : BigTextStyleInformation(body, contentTitle: notification.title),
         ),
       ),
     );

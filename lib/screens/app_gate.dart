@@ -68,7 +68,9 @@ class _AppGateState extends State<AppGate> {
   void initState() {
     super.initState();
     if (_auth.isSignedIn) _start();
-    _tokenSub = widget.onFcmTokenRefresh?.listen((token) => _saveFcmToken(token: token));
+    _tokenSub = widget.onFcmTokenRefresh?.listen(
+      (token) => _saveFcmToken(token: token),
+    );
   }
 
   @override
@@ -103,7 +105,8 @@ class _AppGateState extends State<AppGate> {
       setState(() => _families = families);
       await widget.cache.write(families);
       final isChild =
-          families.isNotEmpty && families.every((f) => f.role != FamilyRole.parent);
+          families.isNotEmpty &&
+          families.every((f) => f.role != FamilyRole.parent);
       if (isChild) unawaited(_maybeAskChildNotifications());
       if (families.isNotEmpty) unawaited(_saveFcmToken());
     } catch (error) {
@@ -125,7 +128,9 @@ class _AppGateState extends State<AppGate> {
     final request = widget.requestNotificationPermission;
     if (request == null) return;
     final already =
-        await widget.notificationsEnabled?.call().catchError((Object _) => false) ??
+        await widget.notificationsEnabled?.call().catchError(
+          (Object _) => false,
+        ) ??
         false;
     if (!already) await request();
   }

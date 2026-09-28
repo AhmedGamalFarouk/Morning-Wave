@@ -193,7 +193,10 @@ class SupabaseFamilyRepository implements FamilyRepository {
   Future<void> saveFcmToken(String token) async {
     final userId = _db.auth.currentUser?.id;
     if (userId == null) return;
-    await _db.from('members').update({'fcm_token': token}).eq('user_id', userId);
+    await _db
+        .from('members')
+        .update({'fcm_token': token})
+        .eq('user_id', userId);
   }
 
   static Membership _membership(Map<String, dynamic> row) {
