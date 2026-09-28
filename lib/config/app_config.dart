@@ -16,6 +16,11 @@ class AppConfig {
   /// Which home screen to preview; see HomeScreen.
   static const preview = String.fromEnvironment('PREVIEW');
 
+  /// RevenueCat's public Android API key for the family plan.
+  static const revenueCatApiKey = String.fromEnvironment('REVENUECAT_API_KEY');
+
   static bool get hasSupabase =>
       supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
+
+  static bool get hasRevenueCat => revenueCatApiKey.isNotEmpty;
 }

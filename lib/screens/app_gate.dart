@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../family/auth.dart';
 import '../family/family_repository.dart';
 import '../placeholder/family.dart';
+import '../services/subscription.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion.dart';
 import '../widgets/sun_painter.dart';
@@ -26,6 +27,7 @@ class AppGate extends StatefulWidget {
     this.notificationsEnabled,
     this.currentFcmToken,
     this.onFcmTokenRefresh,
+    this.subscription,
   });
 
   final Auth auth;
@@ -33,6 +35,9 @@ class AppGate extends StatefulWidget {
   final FamilyCache cache;
   final Future<bool> Function()? requestNotificationPermission;
   final Future<bool> Function()? notificationsEnabled;
+
+  /// Lets a child offer the family plan. Null hides that link.
+  final SubscriptionService? subscription;
 
   /// This install's push token, so it can be saved once signed in.
   final Future<String?> Function()? currentFcmToken;
@@ -324,6 +329,7 @@ class _AppGateState extends State<AppGate> {
               ? () => setState(() => _addingParent = true)
               : null,
           onRefresh: _refresh,
+          subscription: widget.subscription,
         ),
         null,
       );

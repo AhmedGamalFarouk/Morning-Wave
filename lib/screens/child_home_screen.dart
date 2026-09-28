@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 
 import '../family/family_repository.dart';
 import '../placeholder/family.dart';
+import '../services/subscription.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
 import '../widgets/whole_words_text.dart';
+import 'paywall_screen.dart';
 
 /// One parent on the child's home. Until [joined], the card is the invite
 /// with [parentCode]. After that, a [parentCode] is a pending code for a
@@ -38,6 +40,7 @@ class ChildHomeScreen extends StatelessWidget {
     this.childName = PlaceholderFamily.childName,
     this.onAddParent,
     this.onRefresh,
+    this.subscription,
   });
 
   final ChildView view;
@@ -49,6 +52,10 @@ class ChildHomeScreen extends StatelessWidget {
 
   /// Pull down to look again, for example once the parent has joined.
   final Future<void> Function()? onRefresh;
+
+  /// Lets this screen offer the family plan. Null hides that link, such as
+  /// in the design preview.
+  final SubscriptionService? subscription;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +86,25 @@ class ChildHomeScreen extends StatelessWidget {
             child: TextButton(
               onPressed: onAddParent,
               child: const Text('Add a parent who lives apart'),
+            ),
+          ),
+        ],
+        if (subscription != null) ...[
+          const SizedBox(height: 4),
+          Center(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: subscription!.isEntitled,
+              builder: (context, entitled, _) => TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => PaywallScreen(
+                      subscription: subscription!,
+                      parentName: parents.firstOrNull?.name,
+                    ),
+                  ),
+                ),
+                child: Text(entitled ? 'Family plan' : 'Get the family plan'),
+              ),
             ),
           ),
         ],

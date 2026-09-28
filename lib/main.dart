@@ -11,6 +11,7 @@ import 'family/family_repository.dart';
 import 'screens/app_gate.dart';
 import 'screens/home_screen.dart';
 import 'services/notifications.dart';
+import 'services/subscription.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -83,5 +84,8 @@ Widget _signedInApp() {
     notificationsEnabled: Notifications.areEnabled,
     currentFcmToken: Notifications.currentToken,
     onFcmTokenRefresh: Notifications.onTokenRefresh,
+    subscription: AppConfig.hasRevenueCat
+        ? RevenueCatSubscriptionService(apiKey: AppConfig.revenueCatApiKey)
+        : const NoopSubscriptionService(),
   );
 }
