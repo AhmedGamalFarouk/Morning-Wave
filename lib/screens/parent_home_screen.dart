@@ -22,12 +22,18 @@ class ParentHomeScreen extends StatefulWidget {
     this.requestNotificationPermission,
     this.notificationsEnabled,
     this.parentName = PlaceholderFamily.parentName,
+    this.latestPhotoUrl,
   });
 
   final ParentMorning initial;
 
   /// What the family calls the parent; the greeting uses it.
   final String parentName;
+
+  /// Fetches a URL for the family's newest photo, or null if they haven't
+  /// sent one yet. Null hides the fetch and shows the empty frame, as in
+  /// previews.
+  final Future<String?> Function()? latestPhotoUrl;
 
   /// Asked only after the first good morning, behind a warm invitation,
   /// never as a system dialog on first open.
@@ -181,7 +187,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const _FamilyPhoto(),
+            _FamilyPhoto(fetchUrl: widget.latestPhotoUrl),
             if (_morning != ParentMorning.away) ...[
               const SizedBox(height: 20),
               Center(
@@ -310,8 +316,17 @@ class _NotesInvitation extends StatelessWidget {
 
 /// A photo on the fridge. Until the family shares one, the frame says
 /// where it will appear instead of showing a stock picture.
-class _FamilyPhoto extends StatelessWidget {
-  const _FamilyPhoto();
+class _FamilyPhoto extends StatefulWidget {
+  const _FamilyPhoto({this.fetchUrl});
+
+  final Future<String?> Function()? fetchUrl;
+
+  @override
+  State<_FamilyPhoto> createState() => _FamilyPhotoState();
+}
+
+class _FamilyPhotoState extends State<_FamilyPhoto> {
+  late final _url = widget.fetchUrl?.call();
 
   @override
   Widget build(BuildContext context) {
@@ -331,27 +346,47 @@ class _FamilyPhoto extends StatelessWidget {
               colors: [Palette.sky, Palette.paperDeep],
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 24),
-                const SunMark(size: 72),
-                const SizedBox(height: 12),
-                Text(
-                  'Photos from your family will sit right here.',
-                  textAlign: TextAlign.center,
-                  style: text.bodyMedium,
-                ),
-                const SizedBox(height: 24),
-              ],
-            ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: _url == null
+                ? _empty(text)
+                : FutureBuilder<String?>(
+                    future: _url,
+                    builder: (context, snapshot) {
+                      final url = snapshot.data;
+                      if (url == null) return _empty(text);
+                      return Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 260,
+                        errorBuilder: (context, error, stack) => _empty(text),
+                      );
+                    },
+                  ),
           ),
         ),
       ),
     );
   }
+
+  Widget _empty(TextTheme text) => Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(height: 24),
+        const SunMark(size: 72),
+        const SizedBox(height: 12),
+        Text(
+          'Photos from your family will sit right here.',
+          textAlign: TextAlign.center,
+          style: text.bodyMedium,
+        ),
+        const SizedBox(height: 24),
+      ],
+    ),
+  );
 }
 
 /// "tomorrow", "on Friday", "next Monday" for a week from today, or the

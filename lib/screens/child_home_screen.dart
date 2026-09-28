@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../family/family_repository.dart';
 import '../placeholder/family.dart';
@@ -19,6 +20,10 @@ typedef ChildParent = ({
   String? parentCode,
   String? childCode,
   VoidCallback? onNewPhone,
+
+  /// Sends a photo to sit in this parent's photo frame. Null hides "Send a
+  /// photo", such as in the design preview.
+  Future<void> Function(Uint8List jpegBytes)? onSendPhoto,
 });
 
 /// The child's home answers one question before anything else:
@@ -35,6 +40,7 @@ class ChildHomeScreen extends StatelessWidget {
         parentCode: null,
         childCode: null,
         onNewPhone: null,
+        onSendPhoto: null,
       ),
     ],
     this.childName = PlaceholderFamily.childName,
@@ -76,7 +82,7 @@ class ChildHomeScreen extends StatelessWidget {
           // A family whose parent code was used up without a parent row
           // falls back to the hero, whose "New phone" makes a fresh one.
           if (parent.joined || parent.parentCode == null)
-            _ParentHero(view: view, parent: parent)
+            _ParentHero(view: view, parent: parent, subscription: subscription)
           else
             _InviteCard(code: parent.parentCode!, parent: parent.name),
         ],
@@ -211,10 +217,13 @@ class _CodeBlock extends StatelessWidget {
 }
 
 class _ParentHero extends StatefulWidget {
-  const _ParentHero({required this.view, required this.parent});
+  const _ParentHero({required this.view, required this.parent, this.subscription});
 
   final ChildView view;
   final ChildParent parent;
+
+  /// Gates "Send a photo" behind the family plan. Null hides the button.
+  final SubscriptionService? subscription;
 
   @override
   State<_ParentHero> createState() => _ParentHeroState();
@@ -222,12 +231,52 @@ class _ParentHero extends StatefulWidget {
 
 class _ParentHeroState extends State<_ParentHero> {
   var _loveSent = false;
+  var _sendingPhoto = false;
 
   void _sendLove() {
     setState(() => _loveSent = true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${widget.parent.name} will see your love.')),
     );
+  }
+
+  Future<void> _sendPhoto() async {
+    final subscription = widget.subscription;
+    if (subscription == null) return;
+    if (!subscription.isEntitled.value) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PaywallScreen(
+            subscription: subscription,
+            parentName: widget.parent.name,
+          ),
+        ),
+      );
+      return;
+    }
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 70,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _sendingPhoto = true);
+    try {
+      await widget.parent.onSendPhoto!(await picked.readAsBytes());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.parent.name} will see it.')),
+      );
+    } catch (error) {
+      debugPrint('Sending a family photo: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That didn’t go through. Try again?')),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingPhoto = false);
+    }
   }
 
   /// Kept off the card so nobody reads the parent this code by mistake.
@@ -360,6 +409,15 @@ class _ParentHeroState extends State<_ParentHero> {
               onPressed: _loveSent ? null : _sendLove,
               icon: const HeartMark(color: Palette.peach),
               label: WholeWordsText(_loveSent ? 'Love sent' : 'Send love'),
+            ),
+          ],
+          if (widget.parent.onSendPhoto != null) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: _sendingPhoto ? null : _sendPhoto,
+              child: Text(
+                _sendingPhoto ? 'Sending…' : 'Send a photo for $parent’s frame',
+              ),
             ),
           ],
           if (newPhoneCode != null) ...[
