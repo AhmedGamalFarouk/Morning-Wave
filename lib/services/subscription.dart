@@ -31,6 +31,7 @@ abstract interface class SubscriptionService {
 /// anonymous id; "Restore a purchase" re-links a reinstall or a second
 /// phone signed into the same Google Play account.
 class RevenueCatSubscriptionService implements SubscriptionService {
+  // ignore: prefer_initializing_formals
   RevenueCatSubscriptionService({required String apiKey}) : _apiKey = apiKey {
     _init();
   }
