@@ -68,7 +68,7 @@ class _AppGateState extends State<AppGate> {
   void initState() {
     super.initState();
     if (_auth.isSignedIn) _start();
-    _tokenSub = widget.onFcmTokenRefresh?.listen(widget.families.saveFcmToken);
+    _tokenSub = widget.onFcmTokenRefresh?.listen((token) => _saveFcmToken(token: token));
   }
 
   @override
@@ -130,10 +130,13 @@ class _AppGateState extends State<AppGate> {
     if (!already) await request();
   }
 
-  Future<void> _saveFcmToken() async {
+  /// Saves the given token, or the current one when none is given. Errors
+  /// are swallowed: a token rotation or a sign-in isn't worth a crash
+  /// report over a network hiccup.
+  Future<void> _saveFcmToken({String? token}) async {
     try {
-      final token = await widget.currentFcmToken?.call();
-      if (token != null) await widget.families.saveFcmToken(token);
+      final resolved = token ?? await widget.currentFcmToken?.call();
+      if (resolved != null) await widget.families.saveFcmToken(resolved);
     } catch (error) {
       debugPrint('Saving the push token: $error');
     }
