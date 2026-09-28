@@ -67,13 +67,12 @@ class SupabasePhotoRepository implements PhotoRepository {
 
     if (older.isNotEmpty) {
       try {
-        await _db.storage
-            .from(_bucket)
-            .remove([for (final row in older) row['storage_path'] as String]);
-        await _db
-            .from('family_photos')
-            .delete()
-            .inFilter('id', [for (final row in older) row['id'] as String]);
+        await _db.storage.from(_bucket).remove([
+          for (final row in older) row['storage_path'] as String,
+        ]);
+        await _db.from('family_photos').delete().inFilter('id', [
+          for (final row in older) row['id'] as String,
+        ]);
       } catch (error) {
         // The new photo is already sent; a leftover old one just means one
         // extra object until the next send cleans it up.

@@ -217,7 +217,11 @@ class _CodeBlock extends StatelessWidget {
 }
 
 class _ParentHero extends StatefulWidget {
-  const _ParentHero({required this.view, required this.parent, this.subscription});
+  const _ParentHero({
+    required this.view,
+    required this.parent,
+    this.subscription,
+  });
 
   final ChildView view;
   final ChildParent parent;
