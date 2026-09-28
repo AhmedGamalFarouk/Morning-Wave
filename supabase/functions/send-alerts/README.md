@@ -42,6 +42,26 @@ The every-30-seconds job writes the `send-alerts` row in `heartbeats` only while
 10 minutes, so the uptime check on heartbeats also catches a bad secret, a failing function, or an FCM or
 email outage.
 
+### Uptime watcher
+
+`supabase/migrations/20260928000100_uptime_watcher.sql` pings a free external dead man's switch every 5
+minutes, but only while both the `escalation` and `send-alerts` heartbeats are fresh. If the backend stops
+running, nothing pings it, and the outside service emails Ahmed itself after its grace period.
+
+Set up once (Ahmed, with his own hands or a local session — not from cloud):
+
+1. At [healthchecks.io](https://healthchecks.io), free account, create a check named e.g. "Morning Wave
+   heartbeat". Set its period to 10 minutes and grace time to 10 minutes, and add myfakemail@atomicmail.io (or
+   Ahmed's own address) as the alert contact.
+2. Copy its ping URL (`https://hc-ping.com/<uuid>`).
+3. In the Supabase SQL editor on the live project:
+   ```sql
+   select vault.create_secret('<ping URL from step 2>', 'uptime_ping_url');
+   ```
+
+No `uptime_ping_url` secret means the watcher logs a warning and does nothing, so it's safe to merge and
+deploy before this is set up.
+
 ## Test
 
 ```sh
