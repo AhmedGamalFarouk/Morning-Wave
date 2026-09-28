@@ -14,14 +14,11 @@ That works on a fresh clone: Supabase, push and crash reporting stay off and
 a line in the debug log says so. Once `config/dev.json` exists (below), run
 `flutter run --dart-define-from-file=config/dev.json` to connect Supabase.
 
-<<<<<<< HEAD
 With Supabase connected the app starts at sign-in: the grown child signs in
 with Google, names their parent and gets a family code; the parent taps
 "I have a code", types it and lands on the Morning Sun, without an account.
 Without config it previews the home screens instead.
 
-=======
->>>>>>> origin/main
 To preview the child's home instead of the parent's, add
 `--dart-define=PREVIEW=child` (or `child-waiting`, `child-away`). Screens use
 placeholder data from `lib/placeholder/family.dart` until the backend is wired.
