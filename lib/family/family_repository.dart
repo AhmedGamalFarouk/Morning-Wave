@@ -86,6 +86,11 @@ abstract interface class FamilyRepository {
   /// A fresh parent code for a reinstalled or new phone. The parent stays in
   /// the family until the new phone joins with it.
   Future<void> newParentCode(String familyId);
+
+  /// Saves this phone's push token on every family this person belongs to,
+  /// so alerts and family notes can reach it. Safe to call before joining
+  /// a family, and again whenever the token changes.
+  Future<void> saveFcmToken(String token);
 }
 
 class SupabaseFamilyRepository implements FamilyRepository {
@@ -182,6 +187,16 @@ class SupabaseFamilyRepository implements FamilyRepository {
   @override
   Future<void> newParentCode(String familyId) async {
     await _db.rpc('reinvite_parent', params: {'family_id': familyId});
+  }
+
+  @override
+  Future<void> saveFcmToken(String token) async {
+    final userId = _db.auth.currentUser?.id;
+    if (userId == null) return;
+    await _db
+        .from('members')
+        .update({'fcm_token': token})
+        .eq('user_id', userId);
   }
 
   static Membership _membership(Map<String, dynamic> row) {

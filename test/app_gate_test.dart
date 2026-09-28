@@ -108,6 +108,11 @@ class _FakeFamilies implements FamilyRepository {
             : f,
     ];
   }
+
+  String? savedFcmToken;
+
+  @override
+  Future<void> saveFcmToken(String token) async => savedFcmToken = token;
 }
 
 class _FakeCache implements FamilyCache {

@@ -15,10 +15,14 @@ export function parentNudge(): Words {
   };
 }
 
-/** Steps 2 and 3: the child, then the second contact. */
+/**
+ * Steps 2 and 3: the child, then the second contact. The title stays short
+ * enough that the parent's name reads on one line even when collapsed; the
+ * full sentence is in the body, which an expandable notification can show.
+ */
 export function childPush(parentName: string): Words {
   return {
-    title: `💛 Haven't heard from ${parentName} yet`,
+    title: `💛 No word from ${parentName} yet`,
     body: `No good morning from ${parentName} yet today. A quick call might be nice.`,
   };
 }
