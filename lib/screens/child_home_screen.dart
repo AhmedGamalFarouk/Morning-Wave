@@ -8,6 +8,7 @@ import '../services/subscription.dart';
 import '../theme/palette.dart';
 import '../widgets/paper_card.dart';
 import '../widgets/sun_painter.dart';
+import '../widgets/voice_note_recorder_sheet.dart';
 import '../widgets/whole_words_text.dart';
 import 'paywall_screen.dart';
 
@@ -24,6 +25,10 @@ typedef ChildParent = ({
   /// Sends a photo to sit in this parent's photo frame. Null hides "Send a
   /// photo", such as in the design preview.
   Future<void> Function(Uint8List jpegBytes)? onSendPhoto,
+
+  /// Sends a short voice note for this parent to play. Null hides "Send a
+  /// voice note", such as in the design preview.
+  Future<void> Function(Uint8List aacBytes)? onSendVoiceNote,
 });
 
 /// The child's home answers one question before anything else:
@@ -41,6 +46,7 @@ class ChildHomeScreen extends StatelessWidget {
         childCode: null,
         onNewPhone: null,
         onSendPhoto: null,
+        onSendVoiceNote: null,
       ),
     ],
     this.childName = PlaceholderFamily.childName,
@@ -236,6 +242,7 @@ class _ParentHero extends StatefulWidget {
 class _ParentHeroState extends State<_ParentHero> {
   var _loveSent = false;
   var _sendingPhoto = false;
+  var _sendingVoiceNote = false;
 
   void _sendLove() {
     setState(() => _loveSent = true);
@@ -280,6 +287,47 @@ class _ParentHeroState extends State<_ParentHero> {
       );
     } finally {
       if (mounted) setState(() => _sendingPhoto = false);
+    }
+  }
+
+  Future<void> _sendVoiceNote() async {
+    final subscription = widget.subscription;
+    if (subscription == null) return;
+    if (!subscription.isEntitled.value) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => PaywallScreen(
+            subscription: subscription,
+            parentName: widget.parent.name,
+          ),
+        ),
+      );
+      return;
+    }
+    final recorded = await showModalBottomSheet<Uint8List>(
+      context: context,
+      backgroundColor: Palette.paper,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) =>
+          VoiceNoteRecorderSheet(parentName: widget.parent.name),
+    );
+    if (recorded == null || !mounted) return;
+    setState(() => _sendingVoiceNote = true);
+    try {
+      await widget.parent.onSendVoiceNote!(recorded);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.parent.name} will hear it.')),
+      );
+    } catch (error) {
+      debugPrint('Sending a family voice note: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That didn’t go through. Try again?')),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingVoiceNote = false);
     }
   }
 
@@ -421,6 +469,15 @@ class _ParentHeroState extends State<_ParentHero> {
               onPressed: _sendingPhoto ? null : _sendPhoto,
               child: Text(
                 _sendingPhoto ? 'Sending…' : 'Send a photo for $parent’s frame',
+              ),
+            ),
+          ],
+          if (widget.parent.onSendVoiceNote != null) ...[
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: _sendingVoiceNote ? null : _sendVoiceNote,
+              child: Text(
+                _sendingVoiceNote ? 'Sending…' : 'Send $parent a voice note',
               ),
             ),
           ],
