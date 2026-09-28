@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../family/auth.dart';
 import '../family/family_repository.dart';
 import '../family/photo_repository.dart';
+import '../family/voice_note_repository.dart';
 import '../placeholder/family.dart';
 import '../services/subscription.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +31,7 @@ class AppGate extends StatefulWidget {
     this.onFcmTokenRefresh,
     this.subscription,
     this.photos,
+    this.voiceNotes,
   });
 
   final Auth auth;
@@ -39,6 +41,10 @@ class AppGate extends StatefulWidget {
   /// Sends and fetches family photos. Null hides photo sending and shows
   /// the empty frame, such as in the design preview.
   final PhotoRepository? photos;
+
+  /// Sends and fetches family voice notes. Null hides voice note sending
+  /// and the play button, such as in the design preview.
+  final VoiceNoteRepository? voiceNotes;
   final Future<bool> Function()? requestNotificationPermission;
   final Future<bool> Function()? notificationsEnabled;
 
@@ -291,6 +297,9 @@ class _AppGateState extends State<AppGate> {
           latestPhotoUrl: widget.photos == null
               ? null
               : () => widget.photos!.latest(parentOf.first.familyId),
+          latestVoiceNoteUrl: widget.voiceNotes == null
+              ? null
+              : () => widget.voiceNotes!.latest(parentOf.first.familyId),
         ),
         null,
       );
@@ -337,6 +346,12 @@ class _AppGateState extends State<AppGate> {
                     : (jpegBytes) => widget.photos!.send(
                         familyId: family.familyId,
                         jpegBytes: jpegBytes,
+                      ),
+                onSendVoiceNote: widget.voiceNotes == null
+                    ? null
+                    : (aacBytes) => widget.voiceNotes!.send(
+                        familyId: family.familyId,
+                        aacBytes: aacBytes,
                       ),
               ),
           ],

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 import '../placeholder/family.dart';
@@ -23,6 +24,7 @@ class ParentHomeScreen extends StatefulWidget {
     this.notificationsEnabled,
     this.parentName = PlaceholderFamily.parentName,
     this.latestPhotoUrl,
+    this.latestVoiceNoteUrl,
   });
 
   final ParentMorning initial;
@@ -34,6 +36,10 @@ class ParentHomeScreen extends StatefulWidget {
   /// sent one yet. Null hides the fetch and shows the empty frame, as in
   /// previews.
   final Future<String?> Function()? latestPhotoUrl;
+
+  /// Fetches a URL for the family's newest voice note, or null if they
+  /// haven't sent one yet. Null hides the fetch and the play button.
+  final Future<String?> Function()? latestVoiceNoteUrl;
 
   /// Asked only after the first good morning, behind a warm invitation,
   /// never as a system dialog on first open.
@@ -188,6 +194,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ),
             const SizedBox(height: 8),
             _FamilyPhoto(fetchUrl: widget.latestPhotoUrl),
+            if (widget.latestVoiceNoteUrl != null) ...[
+              const SizedBox(height: 16),
+              _FamilyVoiceNote(fetchUrl: widget.latestVoiceNoteUrl!),
+            ],
             if (_morning != ParentMorning.away) ...[
               const SizedBox(height: 20),
               Center(
@@ -387,6 +397,87 @@ class _FamilyPhotoState extends State<_FamilyPhoto> {
       ],
     ),
   );
+}
+
+/// A hello from the family, one large button to play it. The parent's
+/// primary-action size (28sp+) applies here too — this is the second thing
+/// they'll tap after saying good morning.
+class _FamilyVoiceNote extends StatefulWidget {
+  const _FamilyVoiceNote({required this.fetchUrl});
+
+  final Future<String?> Function() fetchUrl;
+
+  @override
+  State<_FamilyVoiceNote> createState() => _FamilyVoiceNoteState();
+}
+
+class _FamilyVoiceNoteState extends State<_FamilyVoiceNote> {
+  late final _url = widget.fetchUrl();
+  final _player = AudioPlayer();
+  var _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _playing = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle(String url) async {
+    if (_playing) {
+      await _player.stop();
+      if (mounted) setState(() => _playing = false);
+      return;
+    }
+    setState(() => _playing = true);
+    try {
+      await _player.play(UrlSource(url));
+    } catch (error) {
+      debugPrint('Playing a family voice note: $error');
+      if (mounted) setState(() => _playing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return FutureBuilder<String?>(
+      future: _url,
+      builder: (context, snapshot) {
+        final url = snapshot.data;
+        if (url == null) return const SizedBox.shrink();
+        return PaperCard(
+          child: Row(
+            children: [
+              const HeartMark(),
+              const SizedBox(width: 14),
+              Expanded(
+                child: WholeWordsText(
+                  _playing ? 'Playing…' : 'A hello from your family',
+                  style: text.titleMedium,
+                ),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  shape: const CircleBorder(),
+                  padding: const EdgeInsets.all(16),
+                ),
+                onPressed: () => _toggle(url),
+                child: Icon(_playing ? Icons.stop : Icons.play_arrow, size: 28),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// "tomorrow", "on Friday", "next Monday" for a week from today, or the

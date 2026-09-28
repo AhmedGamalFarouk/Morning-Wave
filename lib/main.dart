@@ -9,6 +9,7 @@ import 'config/app_config.dart';
 import 'family/auth.dart';
 import 'family/family_repository.dart';
 import 'family/photo_repository.dart';
+import 'family/voice_note_repository.dart';
 import 'screens/app_gate.dart';
 import 'screens/home_screen.dart';
 import 'services/notifications.dart';
@@ -82,6 +83,7 @@ Widget _signedInApp() {
     families: SupabaseFamilyRepository(client),
     cache: PrefsFamilyCache(),
     photos: SupabasePhotoRepository(client),
+    voiceNotes: SupabaseVoiceNoteRepository(client),
     requestNotificationPermission: Notifications.requestPermission,
     notificationsEnabled: Notifications.areEnabled,
     currentFcmToken: Notifications.currentToken,
