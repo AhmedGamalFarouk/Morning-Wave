@@ -139,7 +139,7 @@ class _VoiceNoteRecorderSheetState extends State<VoiceNoteRecorderSheet> {
             Center(
               child: GestureDetector(
                 onTap: switch (_stage) {
-                  _Stage.idle => _start,
+                  _Stage.idle || _Stage.denied => _start,
                   _Stage.recording => _stop,
                   _ => null,
                 },
