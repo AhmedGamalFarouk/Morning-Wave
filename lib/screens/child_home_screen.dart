@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../family/checkin_repository.dart';
 import '../family/family_repository.dart';
 import '../placeholder/family.dart';
 import '../services/subscription.dart';
@@ -29,6 +30,11 @@ typedef ChildParent = ({
   /// Sends a short voice note for this parent to play. Null hides "Send a
   /// voice note", such as in the design preview.
   Future<void> Function(Uint8List aacBytes)? onSendVoiceNote,
+
+  /// Reads this parent's real morning, once, when their card appears.
+  /// Overrides [ChildHomeScreen.view] for this card. Null keeps that
+  /// screen-level view, as in the design preview.
+  Future<FamilyStatus?> Function()? loadStatus,
 });
 
 /// The child's home answers one question before anything else:
@@ -47,6 +53,7 @@ class ChildHomeScreen extends StatelessWidget {
         onNewPhone: null,
         onSendPhoto: null,
         onSendVoiceNote: null,
+        loadStatus: null,
       ),
     ],
     this.childName = PlaceholderFamily.childName,
@@ -243,6 +250,36 @@ class _ParentHeroState extends State<_ParentHero> {
   var _loveSent = false;
   var _sendingPhoto = false;
   var _sendingVoiceNote = false;
+  ChildView? _liveView;
+  DateTime? _checkedInAt;
+  DateTime? _awayUntil;
+  (int, int)? _usualBy;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.parent.loadStatus
+        ?.call()
+        .catchError((Object error) {
+          debugPrint('Loading ${widget.parent.name}’s morning: $error');
+          return null;
+        })
+        .then((status) {
+          if (status == null || !mounted) return;
+          setState(() {
+            _checkedInAt = status.checkedInAt;
+            _awayUntil = status.awayUntil;
+            _usualBy = status.usualByHour == null
+                ? null
+                : (status.usualByHour!, status.usualByMinute!);
+            _liveView = status.away
+                ? ChildView.away
+                : status.checkedInToday
+                ? ChildView.heard
+                : ChildView.waiting;
+          });
+        });
+  }
 
   void _sendLove() {
     setState(() => _loveSent = true);
@@ -401,7 +438,8 @@ class _ParentHeroState extends State<_ParentHero> {
 
     // No parent in the family and no code waiting: say what's needed.
     final needsCode = !widget.parent.joined;
-    final (warmth, top, title, line) = switch (widget.view) {
+    final view = _liveView ?? widget.view;
+    final (warmth, top, title, line) = switch (view) {
       _ when needsCode => (
         0.6,
         Palette.sky,
@@ -418,21 +456,24 @@ class _ParentHeroState extends State<_ParentHero> {
         1.0,
         Palette.glow,
         '$parent said good morning',
-        'Today · ${_clock(context, PlaceholderFamily.checkedInAt)}',
+        'Today · ${_clock(context, _checkedInAt ?? PlaceholderFamily.checkedInAt)}',
       ),
       ChildView.waiting => (
         0.6,
         Palette.sky,
         'Haven’t heard from $parent yet',
-        '$parent’s mornings usually start by '
-            '${PlaceholderFamily.usualMorningBy}.',
+        _usualBy == null
+            ? '$parent’s mornings usually start by '
+                  '${PlaceholderFamily.usualMorningBy}.'
+            : '$parent’s mornings usually start by '
+                  '${_clock(context, DateTime(0, 1, 1, _usualBy!.$1, _usualBy!.$2))}.',
       ),
       ChildView.away => (
         0.45,
         Palette.paperDeep,
         '$parent is away',
-        'Back on ${PlaceholderFamily.awayUntil}. Morning hellos start again '
-            'the day after.',
+        'Back on ${_awayUntil == null ? PlaceholderFamily.awayUntil : MaterialLocalizations.of(context).formatMediumDate(_awayUntil!)}. '
+            'Morning hellos start again the day after.',
       ),
     };
 
@@ -455,7 +496,7 @@ class _ParentHeroState extends State<_ParentHero> {
           ),
           const SizedBox(height: 10),
           Text(line, style: text.bodyLarge?.copyWith(color: Palette.inkSoft)),
-          if (widget.view == ChildView.heard) ...[
+          if (view == ChildView.heard) ...[
             const SizedBox(height: 28),
             FilledButton.icon(
               onPressed: _loveSent ? null : _sendLove,

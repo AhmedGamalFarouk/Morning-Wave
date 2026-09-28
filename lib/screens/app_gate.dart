@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../family/auth.dart';
+import '../family/checkin_repository.dart';
 import '../family/family_repository.dart';
 import '../family/photo_repository.dart';
 import '../family/voice_note_repository.dart';
@@ -32,11 +33,17 @@ class AppGate extends StatefulWidget {
     this.subscription,
     this.photos,
     this.voiceNotes,
+    this.checkins,
   });
 
   final Auth auth;
   final FamilyRepository families;
   final FamilyCache cache;
+
+  /// Reads and records today's check-in and away state. Null keeps the
+  /// parent screen's "ready" default and the child screen's "connected"
+  /// view, such as in the design preview.
+  final CheckinRepository? checkins;
 
   /// Sends and fetches family photos. Null hides photo sending and shows
   /// the empty frame, such as in the design preview.
@@ -300,6 +307,19 @@ class _AppGateState extends State<AppGate> {
           latestVoiceNoteUrl: widget.voiceNotes == null
               ? null
               : () => widget.voiceNotes!.latest(parentOf.first.familyId),
+          loadStatus: widget.checkins == null
+              ? null
+              : () => widget.checkins!.status(parentOf.first.familyId),
+          onSayGoodMorning: widget.checkins == null
+              ? null
+              : () => widget.checkins!.checkIn(parentOf.first.familyId),
+          onGoAway: widget.checkins == null
+              ? null
+              : (backOn) =>
+                    widget.checkins!.setAway(parentOf.first.familyId, backOn),
+          onReturnHome: widget.checkins == null
+              ? null
+              : () => widget.checkins!.setAway(parentOf.first.familyId, null),
         ),
         null,
       );
@@ -353,6 +373,9 @@ class _AppGateState extends State<AppGate> {
                         familyId: family.familyId,
                         aacBytes: aacBytes,
                       ),
+                loadStatus: widget.checkins == null
+                    ? null
+                    : () => widget.checkins!.status(family.familyId),
               ),
           ],
           onAddParent: googleChild

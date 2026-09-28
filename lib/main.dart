@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/app_config.dart';
 import 'family/auth.dart';
+import 'family/checkin_repository.dart';
 import 'family/family_repository.dart';
 import 'family/photo_repository.dart';
 import 'family/voice_note_repository.dart';
@@ -84,6 +85,7 @@ Widget _signedInApp() {
     cache: PrefsFamilyCache(),
     photos: SupabasePhotoRepository(client),
     voiceNotes: SupabaseVoiceNoteRepository(client),
+    checkins: SupabaseCheckinRepository(client),
     requestNotificationPermission: Notifications.requestPermission,
     notificationsEnabled: Notifications.areEnabled,
     currentFcmToken: Notifications.currentToken,
