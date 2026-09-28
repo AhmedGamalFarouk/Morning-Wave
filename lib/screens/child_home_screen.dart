@@ -549,8 +549,10 @@ class _ParentHeroState extends State<_ParentHero> {
 
   /// Follows the phone's 12 or 24-hour setting.
   static String _clock(BuildContext context, DateTime time) {
+    // Server times come back as UTC; toLocal() is a no-op on the wall-clock
+    // DateTime built for the schedule's usual-by time.
     return MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(time),
+      TimeOfDay.fromDateTime(time.toLocal()),
       alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
     );
   }
