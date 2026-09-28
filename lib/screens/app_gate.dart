@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../family/auth.dart';
 import '../family/family_repository.dart';
+import '../family/photo_repository.dart';
 import '../placeholder/family.dart';
 import '../services/subscription.dart';
 import '../theme/app_theme.dart';
@@ -28,11 +29,16 @@ class AppGate extends StatefulWidget {
     this.currentFcmToken,
     this.onFcmTokenRefresh,
     this.subscription,
+    this.photos,
   });
 
   final Auth auth;
   final FamilyRepository families;
   final FamilyCache cache;
+
+  /// Sends and fetches family photos. Null hides photo sending and shows
+  /// the empty frame, such as in the design preview.
+  final PhotoRepository? photos;
   final Future<bool> Function()? requestNotificationPermission;
   final Future<bool> Function()? notificationsEnabled;
 
@@ -282,6 +288,9 @@ class _AppGateState extends State<AppGate> {
           parentName: parentOf.first.parentName,
           requestNotificationPermission: widget.requestNotificationPermission,
           notificationsEnabled: widget.notificationsEnabled,
+          latestPhotoUrl: widget.photos == null
+              ? null
+              : () => widget.photos!.latest(parentOf.first.familyId),
         ),
         null,
       );
@@ -323,6 +332,12 @@ class _AppGateState extends State<AppGate> {
                 parentCode: family.parentCode,
                 childCode: family.childCode,
                 onNewPhone: () => _newParentCode(family),
+                onSendPhoto: widget.photos == null
+                    ? null
+                    : (jpegBytes) => widget.photos!.send(
+                        familyId: family.familyId,
+                        jpegBytes: jpegBytes,
+                      ),
               ),
           ],
           onAddParent: googleChild
