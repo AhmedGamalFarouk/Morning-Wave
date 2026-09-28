@@ -51,8 +51,8 @@ running, nothing pings it, and the outside service emails Ahmed itself after its
 Set up once (Ahmed, with his own hands or a local session — not from cloud):
 
 1. At [healthchecks.io](https://healthchecks.io), free account, create a check named e.g. "Morning Wave
-   heartbeat". Set its period to 10 minutes and grace time to 10 minutes, and add
-   myfakemail@atomicmail.io (or Ahmed's own address) as the alert contact.
+   heartbeat". Set its period to 10 minutes and grace time to 10 minutes, and add myfakemail@atomicmail.io (or
+   Ahmed's own address) as the alert contact.
 2. Copy its ping URL (`https://hc-ping.com/<uuid>`).
 3. In the Supabase SQL editor on the live project:
    ```sql
