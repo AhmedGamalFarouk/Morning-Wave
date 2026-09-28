@@ -9,11 +9,7 @@ import '../widgets/whole_words_text.dart';
 /// The family plan, shown to the child. $59.99/yr, one payment for the
 /// whole family; the parent never sees this screen or pays anything.
 class PaywallScreen extends StatefulWidget {
-  const PaywallScreen({
-    super.key,
-    required this.subscription,
-    this.parentName,
-  });
+  const PaywallScreen({super.key, required this.subscription, this.parentName});
 
   final SubscriptionService subscription;
 
@@ -55,9 +51,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
     } catch (error) {
       debugPrint('Family plan: $error');
       if (mounted) {
-        setState(
-          () => _error = 'That didn’t go through. Give it another try?',
-        );
+        setState(() => _error = 'That didn’t go through. Give it another try?');
       }
       return;
     } finally {
@@ -122,9 +116,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                   'daily good mornings and alerts you '
                                   'already have.'
                                   '${parent == null ? '' : ' $parent never pays a thing — this is just for you.'}',
-                        style: text.bodyLarge?.copyWith(
-                          color: Palette.inkSoft,
-                        ),
+                        style: text.bodyLarge?.copyWith(color: Palette.inkSoft),
                       ),
                     ],
                   ),
