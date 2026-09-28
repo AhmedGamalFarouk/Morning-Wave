@@ -14,6 +14,11 @@ That works on a fresh clone: Supabase, push and crash reporting stay off and
 a line in the debug log says so. Once `config/dev.json` exists (below), run
 `flutter run --dart-define-from-file=config/dev.json` to connect Supabase.
 
+With Supabase connected the app starts at sign-in: the grown child signs in
+with Google, names their parent and gets a family code; the parent taps
+"I have a code", types it and lands on the Morning Sun, without an account.
+Without config it previews the home screens instead.
+
 To preview the child's home instead of the parent's, add
 `--dart-define=PREVIEW=child` (or `child-waiting`, `child-away`). Screens use
 placeholder data from `lib/placeholder/family.dart` until the backend is wired.
@@ -29,6 +34,7 @@ implement it, and `PRODUCT.md` the product facts design work relies on.
 | File | What goes in it | Where to get it |
 | --- | --- | --- |
 | `config/dev.json` | Copy `config/example.json`, set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` | Supabase dashboard, Project Settings > API Keys |
+| `GOOGLE_WEB_CLIENT_ID` in `config/dev.json` | The **Web** OAuth client ID (Google sign-in hands Supabase a token for it). It's public and already in `config/example.json` | Google Cloud project `morning-wave`, APIs & Services > Credentials. It also has an **Android** client for `app.morningwave` with the debug SHA-1; add your own debug SHA-1 there if you build on another machine. The consent screen is in testing mode, so only listed test users can sign in. Supabase Auth > Providers needs Google (with this client ID) and Anonymous sign-ins turned on |
 | `android/app/google-services.json` | Firebase Android config for package `app.morningwave` | Firebase console, Project settings > Your apps > Add Android app |
 
 Both paths are in `.gitignore`. When `google-services.json` is present the

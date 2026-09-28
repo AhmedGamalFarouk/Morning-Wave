@@ -1,4 +1,5 @@
 {
   "SUPABASE_URL": "https://vlxqxlnvrhqsixdskorf.supabase.co",
-  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_..."
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_...",
+  "GOOGLE_WEB_CLIENT_ID": "565279408877-al5t9jtc1oj6l6r1q4r2op8d5hk7f9gv.apps.googleusercontent.com"
 }

@@ -14,4 +14,6 @@ abstract final class PlaceholderFamily {
   static final checkedInAt = DateTime(2026, 9, 28, 8, 14);
 }
 
-enum ChildView { heard, waiting, away }
+/// [connected] is the real app's state until check-ins are read: the
+/// parent's phone is in, and nothing about their morning is claimed yet.
+enum ChildView { connected, heard, waiting, away }

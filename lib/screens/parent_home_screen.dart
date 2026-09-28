@@ -21,9 +21,13 @@ class ParentHomeScreen extends StatefulWidget {
     this.today,
     this.requestNotificationPermission,
     this.notificationsEnabled,
+    this.parentName = PlaceholderFamily.parentName,
   });
 
   final ParentMorning initial;
+
+  /// What the family calls the parent; the greeting uses it.
+  final String parentName;
 
   /// Asked only after the first good morning, behind a warm invitation,
   /// never as a system dialog on first open.
@@ -99,7 +103,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const name = PlaceholderFamily.parentName;
+    final name = widget.parentName;
     final (title, line) = switch (_morning) {
       ParentMorning.ready => ('Good morning, $name', 'Ready to say hello?'),
       ParentMorning.sent => (

@@ -95,6 +95,16 @@ ThemeData buildAppTheme() {
         textStyle: _textTheme.labelLarge,
       ),
     ),
+    // Fields sit on the paper like cut-out cards: warm fill, peach edge,
+    // and the sun's edge colour while typing.
+    inputDecorationTheme: InputDecorationThemeData(
+      filled: true,
+      fillColor: Palette.paper,
+      labelStyle: _textTheme.bodyMedium?.copyWith(color: Palette.inkSoft),
+      border: _fieldBorder(Palette.peach),
+      enabledBorder: _fieldBorder(Palette.peach),
+      focusedBorder: _fieldBorder(Palette.sunEdge, width: 2),
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: Palette.ink,
@@ -103,3 +113,15 @@ ThemeData buildAppTheme() {
     ),
   );
 }
+
+OutlineInputBorder _fieldBorder(Color color, {double width = 1}) =>
+    OutlineInputBorder(
+      borderRadius: const BorderRadius.all(Radius.circular(16)),
+      borderSide: BorderSide(color: color, width: width),
+    );
+
+/// The parent side's primary action: 28sp and a tall, easy target.
+ButtonStyle parentPrimaryButton(BuildContext context) => FilledButton.styleFrom(
+  minimumSize: const Size(64, 72),
+  textStyle: Theme.of(context).textTheme.headlineMedium,
+);
