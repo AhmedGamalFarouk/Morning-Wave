@@ -32,7 +32,7 @@ Deno.test("urgent push to the child, then marked sent", async () => {
   assert.deepEqual(await deliverPending(f.deps), { sent: 1, retry: 0, failed: 0, skipped: 0 });
   assert.equal(f.pushes.length, 1);
   assert.equal(f.pushes[0].urgent, true);
-  assert.equal(f.pushes[0].title, "💛 Haven't heard from Mom yet");
+  assert.equal(f.pushes[0].title, "💛 No word from Mom yet");
   assert.equal(f.pushes[0].tag, "1");
   assert.deepEqual(f.finished, [[1, { kind: "sent" }]]);
 });

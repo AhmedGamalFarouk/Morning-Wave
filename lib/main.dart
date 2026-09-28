@@ -81,5 +81,7 @@ Widget _signedInApp() {
     cache: PrefsFamilyCache(),
     requestNotificationPermission: Notifications.requestPermission,
     notificationsEnabled: Notifications.areEnabled,
+    currentFcmToken: Notifications.currentToken,
+    onFcmTokenRefresh: Notifications.onTokenRefresh,
   );
 }

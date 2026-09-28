@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// Local notification setup: the channels the app posts to and the
@@ -56,6 +57,21 @@ class Notifications {
   static Future<bool> areEnabled() async =>
       await _android?.areNotificationsEnabled() ?? false;
 
+  /// This install's push token, or null when Firebase isn't set up.
+  static Future<String?> currentToken() async {
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } catch (error) {
+      debugPrint('Reading the push token: $error');
+      return null;
+    }
+  }
+
+  /// Fires when Firebase issues a new token for this install (a reinstall,
+  /// a cleared app, or a routine rotation), so it can be saved again.
+  static Stream<String> get onTokenRefresh =>
+      FirebaseMessaging.instance.onTokenRefresh;
+
   /// Android only shows FCM notifications itself while the app is in the
   /// background, so foreground ones are posted here.
   static Future<void> showForeground(RemoteMessage message) async {
@@ -64,10 +80,11 @@ class Notifications {
     // Use the channel the server picked, so quiet messages stay quiet.
     // Anything unrecognised goes out gently rather than as an alarm.
     final channel = _channels[notification.android?.channelId] ?? gentleChannel;
+    final body = notification.body;
     await _plugin.show(
       id: notification.hashCode,
       title: notification.title,
-      body: notification.body,
+      body: body,
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           channel.id,
@@ -78,6 +95,14 @@ class Notifications {
           priority: channel.importance.value >= Importance.high.value
               ? Priority.high
               : Priority.defaultPriority,
+          // Collapsed, this still reads as one line; a pulled-down tap
+          // expands to the full note, so nothing is ever cut off.
+          styleInformation: body == null
+              ? null
+              : BigTextStyleInformation(
+                  body,
+                  contentTitle: notification.title,
+                ),
         ),
       ),
     );

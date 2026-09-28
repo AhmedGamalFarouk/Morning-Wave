@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../family/auth.dart';
@@ -22,6 +24,8 @@ class AppGate extends StatefulWidget {
     required this.cache,
     this.requestNotificationPermission,
     this.notificationsEnabled,
+    this.currentFcmToken,
+    this.onFcmTokenRefresh,
   });
 
   final Auth auth;
@@ -29,6 +33,12 @@ class AppGate extends StatefulWidget {
   final FamilyCache cache;
   final Future<bool> Function()? requestNotificationPermission;
   final Future<bool> Function()? notificationsEnabled;
+
+  /// This install's push token, so it can be saved once signed in.
+  final Future<String?> Function()? currentFcmToken;
+
+  /// Fires when the token changes, so the saved one stays current.
+  final Stream<String>? onFcmTokenRefresh;
 
   @override
   State<AppGate> createState() => _AppGateState();
@@ -46,6 +56,8 @@ class _AppGateState extends State<AppGate> {
   var _signingIn = false;
   var _enteringCode = false;
   var _addingParent = false;
+  var _childNotifAsked = false;
+  StreamSubscription<String>? _tokenSub;
 
   Auth get _auth => widget.auth;
 
@@ -56,6 +68,13 @@ class _AppGateState extends State<AppGate> {
   void initState() {
     super.initState();
     if (_auth.isSignedIn) _start();
+    _tokenSub = widget.onFcmTokenRefresh?.listen(widget.families.saveFcmToken);
+  }
+
+  @override
+  void dispose() {
+    _tokenSub?.cancel();
+    super.dispose();
   }
 
   /// Opens on the families seen last time, then checks in the background,
@@ -83,6 +102,10 @@ class _AppGateState extends State<AppGate> {
       if (!mounted) return;
       setState(() => _families = families);
       await widget.cache.write(families);
+      final isChild =
+          families.isNotEmpty && families.every((f) => f.role != FamilyRole.parent);
+      if (isChild) unawaited(_maybeAskChildNotifications());
+      if (families.isNotEmpty) unawaited(_saveFcmToken());
     } catch (error) {
       debugPrint('Loading families: $error');
       // Without knowing the families, setup could make a duplicate. With
@@ -90,6 +113,29 @@ class _AppGateState extends State<AppGate> {
       if (mounted && _families == null) setState(() => _unreachable = true);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// The child gets urgent alerts too, so this asks once per app run,
+  /// the same as the parent's own request but with no priming card first:
+  /// the system prompt is enough context for someone setting up a family.
+  Future<void> _maybeAskChildNotifications() async {
+    if (_childNotifAsked) return;
+    _childNotifAsked = true;
+    final request = widget.requestNotificationPermission;
+    if (request == null) return;
+    final already =
+        await widget.notificationsEnabled?.call().catchError((Object _) => false) ??
+        false;
+    if (!already) await request();
+  }
+
+  Future<void> _saveFcmToken() async {
+    try {
+      final token = await widget.currentFcmToken?.call();
+      if (token != null) await widget.families.saveFcmToken(token);
+    } catch (error) {
+      debugPrint('Saving the push token: $error');
     }
   }
 
