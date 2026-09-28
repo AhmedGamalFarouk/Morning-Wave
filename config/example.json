@@ -1,5 +1,6 @@
 {
   "SUPABASE_URL": "https://vlxqxlnvrhqsixdskorf.supabase.co",
   "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_IL2aWS_MNLCG0S38Q5QBbA_URT44fZl",
-  "GOOGLE_WEB_CLIENT_ID": "565279408877-al5t9jtc1oj6l6r1q4r2op8d5hk7f9gv.apps.googleusercontent.com"
+  "GOOGLE_WEB_CLIENT_ID": "565279408877-al5t9jtc1oj6l6r1q4r2op8d5hk7f9gv.apps.googleusercontent.com",
+  "REVENUECAT_API_KEY": ""
 }
