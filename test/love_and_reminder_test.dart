@@ -18,16 +18,21 @@ FamilyStatus _status({
   usualByMinute: 0,
 );
 
-ChildParent _mom(Future<void> Function() onSendLove) => (
+ChildParent _mom({
+  Future<void> Function()? onSendLove,
+  Future<void> Function(int hour, int minute)? onSetUsualBy,
+  Future<FamilyStatus?> Function()? loadStatus,
+}) => (
   name: 'Mom',
   joined: true,
   parentCode: null,
   childCode: null,
   onNewPhone: null,
   onSendLove: onSendLove,
+  onSetUsualBy: onSetUsualBy,
   onSendPhoto: null,
   onSendVoiceNote: null,
-  loadStatus: null,
+  loadStatus: loadStatus,
 );
 
 void main() {
@@ -85,9 +90,11 @@ void main() {
         home: ChildHomeScreen(
           view: ChildView.heard,
           parents: [
-            _mom(() async {
-              if (++tries == 1) throw Exception('offline');
-            }),
+            _mom(
+              onSendLove: () async {
+                if (++tries == 1) throw Exception('offline');
+              },
+            ),
           ],
         ),
       ),
@@ -102,5 +109,64 @@ void main() {
     await tester.pump();
     expect(tries, 2);
     expect(find.text('Love sent'), findsOneWidget);
+  });
+
+  testWidgets('a child moves when Mom’s mornings start by', (tester) async {
+    (int, int)? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: ChildHomeScreen(
+          parents: [
+            _mom(
+              loadStatus: () async => _status(),
+              onSetUsualBy: (hour, minute) async => saved = (hour, minute),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mom’s mornings start by 10:00 AM. Change?'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mom’s mornings usually start by'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(saved, (10, 0));
+  });
+
+  testWidgets('a time that already passed today is turned down kindly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: ChildHomeScreen(
+          parents: [
+            _mom(
+              loadStatus: () async => _status(),
+              onSetUsualBy: (_, _) async => throw const MorningAlreadyPassed(),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mom’s mornings start by 10:00 AM. Change?'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('That time has passed for Mom today'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Mom’s mornings start by 10:00 AM. Change?'),
+      findsOneWidget,
+    );
   });
 }

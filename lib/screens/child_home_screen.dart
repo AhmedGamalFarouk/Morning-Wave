@@ -23,6 +23,10 @@ typedef ChildParent = ({
   String? childCode,
   VoidCallback? onNewPhone,
 
+  /// Moves when this parent's mornings usually start by. Null hides the
+  /// change, such as in the design preview.
+  Future<void> Function(int hour, int minute)? onSetUsualBy,
+
   /// Sends a heart for today's good morning. Null keeps "Send love" local
   /// only, such as in the design preview.
   Future<void> Function()? onSendLove,
@@ -56,6 +60,7 @@ class ChildHomeScreen extends StatelessWidget {
         childCode: null,
         onNewPhone: null,
         onSendLove: null,
+        onSetUsualBy: null,
         onSendPhoto: null,
         onSendVoiceNote: null,
         loadStatus: null,
@@ -598,12 +603,70 @@ class _ParentHeroState extends State<_ParentHero> {
               child: Text('New phone for $parent?'),
             ),
           ],
+          if (widget.parent.onSetUsualBy != null &&
+              widget.parent.joined &&
+              _usualBy != null)
+            TextButton(
+              onPressed: _changeUsualBy,
+              child: Text(
+                '$parent’s mornings start by '
+                '${_clock(context, DateTime(0, 1, 1, _usualBy!.$1, _usualBy!.$2))}. Change?',
+              ),
+            ),
           if (childCode != null)
             TextButton(
               onPressed: () => _showChildCode(childCode),
               child: const Text('Invite a brother or sister'),
             ),
         ],
+      ),
+    );
+  }
+
+  /// The family hears if the parent hasn't said good morning by this time,
+  /// so a late riser needs a later one.
+  Future<void> _changeUsualBy() async {
+    final parent = widget.parent.name;
+    final messenger = ScaffoldMessenger.of(context);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _usualBy!.$1, minute: _usualBy!.$2),
+      helpText: '$parent’s mornings usually start by',
+    );
+    if (picked == null || !mounted) return;
+    // window_start sits at midnight, so the end must come after it.
+    if (picked.hour == 0 && picked.minute == 0) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Pick a time just after midnight.')),
+      );
+      return;
+    }
+    try {
+      await widget.parent.onSetUsualBy!(picked.hour, picked.minute);
+    } on MorningAlreadyPassed {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'That time has passed for $parent today. Pick a later one, '
+            'or change it after $parent says good morning.',
+          ),
+        ),
+      );
+      return;
+    } catch (error) {
+      debugPrint('Changing the morning time: $error');
+      messenger.showSnackBar(
+        const SnackBar(content: Text('That didn’t go through. Try again?')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _usualBy = (picked.hour, picked.minute));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Done. You’ll only hear if $parent hasn’t said good morning by then.',
+        ),
       ),
     );
   }
