@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 /// A family's morning, from `family_status` (see the migrations): whether
 /// the parent has said good morning today, in the family's own day, and
@@ -26,6 +27,13 @@ class FamilyStatus {
   final int? usualByMinute;
 }
 
+/// Thrown when a new "usually starts by" time has already passed today in
+/// the family's zone and the parent hasn't said good morning: saving it
+/// would alert the family at once.
+class MorningAlreadyPassed implements Exception {
+  const MorningAlreadyPassed();
+}
+
 /// Every call the app makes about today's check-in. `family_status` owns the
 /// "checked in / away" logic; this only reads it and records taps.
 abstract interface class CheckinRepository {
@@ -40,9 +48,9 @@ abstract interface class CheckinRepository {
   /// Null clears away mode.
   Future<void> setAway(String familyId, DateTime? backOn);
 
-  /// Moves the time the parent's mornings usually start by (window_end),
-  /// which is when the family would first hear if they haven't. In the
-  /// family's own time zone.
+  /// Sets when the parent's mornings usually start by (window_end, in the
+  /// family's own zone): the family hears only if they haven't by then.
+  /// Throws [MorningAlreadyPassed].
   Future<void> setUsualBy(
     String familyId, {
     required int hour,
@@ -109,15 +117,36 @@ class SupabaseCheckinRepository implements CheckinRepository {
     required int hour,
     required int minute,
   }) async {
+    final schedule = await _db
+        .from('schedules')
+        .select('time_zone')
+        .eq('family_id', familyId)
+        .single();
+    final today = await _db
+        .from('family_status')
+        .select('checked_in_today, away')
+        .eq('family_id', familyId)
+        .single();
+    if (today['checked_in_today'] != true && today['away'] != true) {
+      final now = tz.TZDateTime.now(
+        tz.getLocation(schedule['time_zone'] as String),
+      );
+      if (hour * 60 + minute <= now.hour * 60 + now.minute) {
+        throw const MorningAlreadyPassed();
+      }
+    }
     String two(int n) => n.toString().padLeft(2, '0');
-    await _db
+    final saved = await _db
         .from('schedules')
         .update({
           // Nothing reads window_start; it only has to sit before the end.
           'window_start': '00:00',
           'window_end': '${two(hour)}:${two(minute)}',
         })
-        .eq('family_id', familyId);
+        .eq('family_id', familyId)
+        .select('family_id');
+    // RLS filters a forbidden update to zero rows rather than failing.
+    if (saved.isEmpty) throw StateError('The morning time wasn’t saved.');
   }
 
   @override

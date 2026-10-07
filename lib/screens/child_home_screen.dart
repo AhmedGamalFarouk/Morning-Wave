@@ -635,14 +635,24 @@ class _ParentHeroState extends State<_ParentHero> {
     );
     if (picked == null || !mounted) return;
     // window_start sits at midnight, so the end must come after it.
-    if (picked.hour == 0) {
+    if (picked.hour == 0 && picked.minute == 0) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Pick a time after 1 AM.')),
+        const SnackBar(content: Text('Pick a time just after midnight.')),
       );
       return;
     }
     try {
       await widget.parent.onSetUsualBy!(picked.hour, picked.minute);
+    } on MorningAlreadyPassed {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'That time has passed for $parent today. Pick a later one, '
+            'or change it after $parent says good morning.',
+          ),
+        ),
+      );
+      return;
     } catch (error) {
       debugPrint('Changing the morning time: $error');
       messenger.showSnackBar(

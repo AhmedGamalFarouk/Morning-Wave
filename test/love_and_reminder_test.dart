@@ -136,4 +136,37 @@ void main() {
 
     expect(saved, (10, 0));
   });
+
+  testWidgets('a time that already passed today is turned down kindly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: ChildHomeScreen(
+          parents: [
+            _mom(
+              loadStatus: () async => _status(),
+              onSetUsualBy: (_, _) async => throw const MorningAlreadyPassed(),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mom’s mornings start by 10:00 AM. Change?'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('That time has passed for Mom today'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Mom’s mornings start by 10:00 AM. Change?'),
+      findsOneWidget,
+    );
+  });
 }
