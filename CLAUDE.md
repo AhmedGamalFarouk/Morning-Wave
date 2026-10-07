@@ -55,10 +55,10 @@ Daily check-in app for older parents who live alone, paid for by their adult chi
 - Closed test from 2026-12-14. Play launch 2027-01-19. Mother's Day push to 2027-05-09.
 
 ## To-dos before the closed test
-- FCM service-account key via the secrets script, then a test push to Ahmed's phone.
-- Delete merged branches.
-- Uptime watcher on heartbeats.
-- Device end-to-end test.
-- Remove the calling stub.
+- Ahmed: Play upload key + `android/key.properties` (README); its SHA-1 and Play's app signing SHA-1 on the Android OAuth client.
+- Ahmed: FCM service-account key via the secrets script, then a test push to his phone.
+- Ahmed: OAuth consent screen to production; RevenueCat $59.99/yr product in Play Console.
+- Device end-to-end test, including the step 1 parent nudge (never yet fired live).
+- Play Console: listing, Data safety (`privacy.html`, deletion link `privacy.html#delete-account`, terms `terms.html`), 12 closed testers.
 - CAPTCHA before public launch.
-- Then plan step 4: voice, photos, paywall.
+- Later: push to the parent when love arrives; mood.

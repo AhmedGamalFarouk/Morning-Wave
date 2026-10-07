@@ -423,6 +423,13 @@ class _AppGateState extends State<AppGate> {
                 parentCode: family.parentCode,
                 childCode: family.childCode,
                 onNewPhone: () => _newParentCode(family),
+                onSetUsualBy: widget.checkins == null
+                    ? null
+                    : (hour, minute) => widget.checkins!.setUsualBy(
+                        family.familyId,
+                        hour: hour,
+                        minute: minute,
+                      ),
                 onSendLove: widget.checkins == null
                     ? null
                     : () => widget.checkins!.sendLove(family.familyId),

@@ -40,6 +40,15 @@ abstract interface class CheckinRepository {
   /// Null clears away mode.
   Future<void> setAway(String familyId, DateTime? backOn);
 
+  /// Moves the time the parent's mornings usually start by (window_end),
+  /// which is when the family would first hear if they haven't. In the
+  /// family's own time zone.
+  Future<void> setUsualBy(
+    String familyId, {
+    required int hour,
+    required int minute,
+  });
+
   /// A child's heart for today's good morning. Only a signed-in child of
   /// [familyId] may call this; the server rejects anyone else.
   Future<void> sendLove(String familyId);
@@ -92,6 +101,23 @@ class SupabaseCheckinRepository implements CheckinRepository {
       'member_id': member['id'],
       'source': 'tap',
     });
+  }
+
+  @override
+  Future<void> setUsualBy(
+    String familyId, {
+    required int hour,
+    required int minute,
+  }) async {
+    String two(int n) => n.toString().padLeft(2, '0');
+    await _db
+        .from('schedules')
+        .update({
+          // Nothing reads window_start; it only has to sit before the end.
+          'window_start': '00:00',
+          'window_end': '${two(hour)}:${two(minute)}',
+        })
+        .eq('family_id', familyId);
   }
 
   @override
