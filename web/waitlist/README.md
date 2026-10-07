@@ -19,8 +19,9 @@ Connect the GitHub repo in Cloudflare Pages, then set:
 
 ## Before launch
 
-- Replace the waitlist-only privacy page with the full policy and terms for
-  the app (plan phase 5).
+- `privacy.html` is the app's policy too. Play Console takes its URL as the
+  privacy policy and `privacy.html#delete-account` as the account deletion
+  link. Terms of service are still to write.
 - Double opt-in: signups aren't confirmed by email yet, so a mistyped or fake
   address still lands in the table. Add a confirmation email before the launch
   email goes out (plan phase 5). Doing it for $0 needs a free transactional

@@ -59,6 +59,7 @@ class ChildHomeScreen extends StatelessWidget {
     this.childName = PlaceholderFamily.childName,
     this.onAddParent,
     this.onRefresh,
+    this.onDeleteAccount,
     this.subscription,
   });
 
@@ -71,6 +72,10 @@ class ChildHomeScreen extends StatelessWidget {
 
   /// Pull down to look again, for example once the parent has joined.
   final Future<void> Function()? onRefresh;
+
+  /// Deletes this person's account, after they confirm. Null hides it, such
+  /// as in the design preview.
+  final Future<void> Function()? onDeleteAccount;
 
   /// Lets this screen offer the family plan. Null hides that link, such as
   /// in the design preview.
@@ -127,6 +132,16 @@ class ChildHomeScreen extends StatelessWidget {
             ),
           ),
         ],
+        if (onDeleteAccount != null) ...[
+          const SizedBox(height: 4),
+          Center(
+            child: TextButton(
+              onPressed: () => _confirmDelete(context),
+              style: TextButton.styleFrom(foregroundColor: Palette.inkSoft),
+              child: const Text('Delete my account'),
+            ),
+          ),
+        ],
       ],
     );
     return Scaffold(
@@ -140,6 +155,33 @@ class ChildHomeScreen extends StatelessWidget {
               ),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Palette.paper,
+        title: const Text('Delete your account?'),
+        content: const Text(
+          'Your photos and voice notes go with it. If you’re the last one '
+          'in a family, that family goes too, and its phone stops saying '
+          'good morning. If you pay for the family plan, cancel it in '
+          'Google Play as well.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (yes ?? false) await onDeleteAccount!();
   }
 }
 
@@ -456,15 +498,16 @@ class _ParentHeroState extends State<_ParentHero> {
         1.0,
         Palette.glow,
         '$parent said good morning',
-        'Today · ${_clock(context, _checkedInAt ?? PlaceholderFamily.checkedInAt)}',
+        _checkedInAt == null
+            ? 'Today'
+            : 'Today · ${_clock(context, _checkedInAt!)}',
       ),
       ChildView.waiting => (
         0.6,
         Palette.sky,
         'Haven’t heard from $parent yet',
         _usualBy == null
-            ? '$parent’s mornings usually start by '
-                  '${PlaceholderFamily.usualMorningBy}.'
+            ? 'You’ll hear when they say good morning.'
             : '$parent’s mornings usually start by '
                   '${_clock(context, DateTime(0, 1, 1, _usualBy!.$1, _usualBy!.$2))}.',
       ),
@@ -472,8 +515,10 @@ class _ParentHeroState extends State<_ParentHero> {
         0.45,
         Palette.paperDeep,
         '$parent is away',
-        'Back on ${_awayUntil == null ? PlaceholderFamily.awayUntil : MaterialLocalizations.of(context).formatMediumDate(_awayUntil!)}. '
-            'Morning hellos start again the day after.',
+        _awayUntil == null
+            ? 'Morning hellos start again when they’re home.'
+            : 'Back on ${MaterialLocalizations.of(context).formatMediumDate(_awayUntil!)}. '
+                  'Morning hellos start again the day after.',
       ),
     };
 

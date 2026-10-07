@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -31,11 +33,24 @@ android {
         versionName = flutter.versionName
     }
 
+    // The Play upload key, from android/key.properties (never committed, see
+    // README). Without it a release build fails rather than ship debug-signed.
+    val keyProperties = rootProject.file("key.properties")
+    if (keyProperties.exists()) {
+        val keys = Properties().apply { keyProperties.inputStream().use { load(it) } }
+        signingConfigs {
+            create("upload") {
+                keyAlias = keys.getProperty("keyAlias")
+                keyPassword = keys.getProperty("keyPassword")
+                storeFile = file(keys.getProperty("storeFile"))
+                storePassword = keys.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
 }
@@ -57,6 +72,16 @@ dependencies {
 // Firebase config is not committed (see README). Without it debug builds
 // still run with push and Crashlytics off, but a release build fails so it
 // can never ship without crash reporting.
+if (!rootProject.file("key.properties").exists()) {
+    tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+        doFirst {
+            throw GradleException(
+                "android/key.properties is missing. Release builds need the upload key; see README.",
+            )
+        }
+    }
+}
+
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
     apply(plugin = "com.google.firebase.crashlytics")

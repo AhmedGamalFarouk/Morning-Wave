@@ -270,6 +270,27 @@ class _AppGateState extends State<AppGate> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    try {
+      await widget.families.deleteMyAccount();
+    } catch (error) {
+      debugPrint('Deleting the account: $error');
+      _say(_cantReach);
+      return;
+    }
+    // The account is gone, so this phone must forget it even if the
+    // server refuses to end a session it no longer knows.
+    try {
+      await _auth.signOut();
+    } catch (error) {
+      debugPrint('Signing out after deleting: $error');
+    }
+    await widget.cache.write(null);
+    if (!mounted) return;
+    setState(() => _families = null);
+    _say('Your account is deleted.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final (key, screen, back) = _screen();
@@ -382,6 +403,7 @@ class _AppGateState extends State<AppGate> {
               ? () => setState(() => _addingParent = true)
               : null,
           onRefresh: _refresh,
+          onDeleteAccount: googleChild ? _deleteAccount : null,
           subscription: widget.subscription,
         ),
         null,
