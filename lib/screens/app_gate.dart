@@ -278,7 +278,13 @@ class _AppGateState extends State<AppGate> {
       _say(_cantReach);
       return;
     }
-    await _auth.signOut();
+    // The account is gone, so this phone must forget it even if the
+    // server refuses to end a session it no longer knows.
+    try {
+      await _auth.signOut();
+    } catch (error) {
+      debugPrint('Signing out after deleting: $error');
+    }
     await widget.cache.write(null);
     if (!mounted) return;
     setState(() => _families = null);
