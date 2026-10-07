@@ -113,6 +113,15 @@ class _FakeFamilies implements FamilyRepository {
 
   @override
   Future<void> saveFcmToken(String token) async => savedFcmToken = token;
+
+  var deleted = false;
+
+  @override
+  Future<void> deleteMyAccount() async {
+    if (!reachable) throw Exception('offline');
+    deleted = true;
+    mine = [];
+  }
 }
 
 class _FakeCache implements FamilyCache {
@@ -399,6 +408,37 @@ void main() {
     // Mom stays in the family until the new phone joins.
     expect(find.text('Mom is all set'), findsOneWidget);
     expect(find.text('ZP3Q W9CD'), findsOneWidget);
+  });
+
+  testWidgets('deleting the account asks first, then signs out', (
+    tester,
+  ) async {
+    final auth = _FakeAuth(googleName: 'Sara')..isSignedIn = true;
+    final families = _FakeFamilies()..mine = [_family('Mom')];
+    final cache = _FakeCache();
+    await tester.pumpWidget(_app(auth, families, cache));
+    await _settle(tester);
+
+    await _tap(tester, 'Delete my account');
+    await _tap(tester, 'Keep it');
+    expect(families.deleted, isFalse);
+
+    families.reachable = false;
+    await _tap(tester, 'Delete my account');
+    await _tap(tester, 'Delete');
+    expect(auth.isSignedIn, isTrue, reason: 'nothing changes when it fails');
+    expect(find.text('Mom is all set'), findsOneWidget);
+
+    families.reachable = true;
+    // Let the "can't reach" note slide away from over the button.
+    await tester.pump(const Duration(seconds: 5));
+    await _settle(tester);
+    await _tap(tester, 'Delete my account');
+    await _tap(tester, 'Delete');
+    expect(families.deleted, isTrue);
+    expect(auth.isSignedIn, isFalse);
+    expect(cache.saved, isNull);
+    expect(find.text('I have a code'), findsOneWidget);
   });
 
   testWidgets('back from a wrong code reaches Google sign-in again', (

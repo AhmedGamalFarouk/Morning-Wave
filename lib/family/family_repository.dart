@@ -91,6 +91,10 @@ abstract interface class FamilyRepository {
   /// so alerts and family notes can reach it. Safe to call before joining
   /// a family, and again whenever the token changes.
   Future<void> saveFcmToken(String token);
+
+  /// Deletes this person's account and what they sent, and any family they
+  /// were the last child of. Sign out afterwards: the session is dead.
+  Future<void> deleteMyAccount();
 }
 
 class SupabaseFamilyRepository implements FamilyRepository {
@@ -197,6 +201,21 @@ class SupabaseFamilyRepository implements FamilyRepository {
         .from('members')
         .update({'fcm_token': token})
         .eq('user_id', userId);
+  }
+
+  @override
+  Future<void> deleteMyAccount() async {
+    // Files first: once the account is gone, storage no longer lets this
+    // person remove them. A failure here stops before anything is deleted.
+    final files = await _db.rpc('my_account_files') as List;
+    final byBucket = <String, List<String>>{};
+    for (final file in files) {
+      (byBucket[file['bucket'] as String] ??= []).add(file['path'] as String);
+    }
+    for (final MapEntry(key: bucket, value: paths) in byBucket.entries) {
+      await _db.storage.from(bucket).remove(paths);
+    }
+    await _db.rpc('delete_my_account');
   }
 
   static Membership _membership(Map<String, dynamic> row) {

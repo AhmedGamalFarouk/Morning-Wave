@@ -234,7 +234,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                         padding: const EdgeInsets.only(top: 8, bottom: 24),
                         child: Column(
                           children: [
-                            const _FamilyNote(),
+                            // A sample note for the design preview only:
+                            // the family can't send written notes yet.
+                            if (widget.onSayGoodMorning == null)
+                              const _FamilyNote(),
                             if (!_notesAsked &&
                                 widget.requestNotificationPermission !=
                                     null) ...[

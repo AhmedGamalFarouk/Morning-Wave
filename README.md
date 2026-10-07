@@ -36,11 +36,13 @@ implement it, and `PRODUCT.md` the product facts design work relies on.
 | `config/dev.json` | Copy `config/example.json`, set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` | Supabase dashboard, Project Settings > API Keys |
 | `GOOGLE_WEB_CLIENT_ID` in `config/dev.json` | The **Web** OAuth client ID (Google sign-in hands Supabase a token for it). It's public and already in `config/example.json` | Google Cloud project `morning-wave`, APIs & Services > Credentials. It also has an **Android** client for `app.morningwave` with the debug SHA-1; add your own debug SHA-1 there if you build on another machine. The consent screen is in testing mode, so only listed test users can sign in. Supabase Auth > Providers needs Google (with this client ID) and Anonymous sign-ins turned on |
 | `android/app/google-services.json` | Firebase Android config for package `app.morningwave` | Firebase console, Project settings > Your apps > Add Android app |
+| `android/key.properties` + the `.jks` it names | `storeFile` (path relative to `android/app`), `storePassword`, `keyAlias`, `keyPassword` for the Play upload key | Make once: `keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload`. Back both up outside the repo; losing them means a key reset through Play support. Add the upload key's SHA-1 and Play Console's app signing SHA-1 to the Android OAuth client, or Google sign-in fails in Play builds |
 
 Both paths are in `.gitignore`. When `google-services.json` is present the
 Google Services and Crashlytics Gradle plugins switch on automatically.
-Release builds (`flutter build apk`) fail without it, so a build without
-crash reporting can't ship by accident.
+Release builds (`flutter build appbundle`) fail without it or without
+`key.properties`, so a build without crash reporting, or signed with the
+debug key, can't ship by accident.
 
 ## What is wired
 

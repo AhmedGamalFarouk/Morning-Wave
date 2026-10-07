@@ -289,7 +289,7 @@ void main() {
     await tester.pumpWidget(_app(const ChildHomeScreen()));
 
     expect(find.text('Mom said good morning'), findsOneWidget);
-    expect(find.text('Today · 8:14 AM'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
 
     await tester.tap(find.text('Send love'));
     await _settle(tester);
