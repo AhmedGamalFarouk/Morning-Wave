@@ -34,6 +34,7 @@ class AppGate extends StatefulWidget {
     this.photos,
     this.voiceNotes,
     this.checkins,
+    this.setMorningReminder,
   });
 
   final Auth auth;
@@ -44,6 +45,10 @@ class AppGate extends StatefulWidget {
   /// parent screen's "ready" default and the child screen's "connected"
   /// view, such as in the design preview.
   final CheckinRepository? checkins;
+
+  /// Sets the parent's daily good morning reminder to start at the given
+  /// time, or stops it with null. Null leaves reminders alone, as in tests.
+  final Future<void> Function(DateTime? first)? setMorningReminder;
 
   /// Sends and fetches family photos. Null hides photo sending and shows
   /// the empty frame, such as in the design preview.
@@ -291,6 +296,31 @@ class _AppGateState extends State<AppGate> {
     _say('Your account is deleted.');
   }
 
+  /// Reads the parent's morning and moves the reminder to match: past
+  /// today once they've said good morning, past the days they're away.
+  Future<FamilyStatus> _statusAndReminder(String familyId) async {
+    final status = await widget.checkins!.status(familyId);
+    try {
+      await widget.setMorningReminder?.call(
+        nextMorningReminder(status, DateTime.now()),
+      );
+    } catch (error) {
+      debugPrint('Setting the morning reminder: $error');
+    }
+    return status;
+  }
+
+  /// After the parent changes their morning, the reminder follows.
+  Future<void> _thenRemind(String familyId, Future<void> change) async {
+    await change;
+    unawaited(
+      _statusAndReminder(familyId).then(
+        (_) {},
+        onError: (Object error) => debugPrint('Rereading the morning: $error'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final (key, screen, back) = _screen();
@@ -328,19 +358,30 @@ class _AppGateState extends State<AppGate> {
           latestVoiceNoteUrl: widget.voiceNotes == null
               ? null
               : () => widget.voiceNotes!.latest(parentOf.first.familyId),
+          lovedBy: widget.checkins == null
+              ? null
+              : () => widget.checkins!.lovedBy(parentOf.first.familyId),
           loadStatus: widget.checkins == null
               ? null
-              : () => widget.checkins!.status(parentOf.first.familyId),
+              : () => _statusAndReminder(parentOf.first.familyId),
           onSayGoodMorning: widget.checkins == null
               ? null
-              : () => widget.checkins!.checkIn(parentOf.first.familyId),
+              : () => _thenRemind(
+                  parentOf.first.familyId,
+                  widget.checkins!.checkIn(parentOf.first.familyId),
+                ),
           onGoAway: widget.checkins == null
               ? null
-              : (backOn) =>
-                    widget.checkins!.setAway(parentOf.first.familyId, backOn),
+              : (backOn) => _thenRemind(
+                  parentOf.first.familyId,
+                  widget.checkins!.setAway(parentOf.first.familyId, backOn),
+                ),
           onReturnHome: widget.checkins == null
               ? null
-              : () => widget.checkins!.setAway(parentOf.first.familyId, null),
+              : () => _thenRemind(
+                  parentOf.first.familyId,
+                  widget.checkins!.setAway(parentOf.first.familyId, null),
+                ),
         ),
         null,
       );
@@ -382,6 +423,9 @@ class _AppGateState extends State<AppGate> {
                 parentCode: family.parentCode,
                 childCode: family.childCode,
                 onNewPhone: () => _newParentCode(family),
+                onSendLove: widget.checkins == null
+                    ? null
+                    : () => widget.checkins!.sendLove(family.familyId),
                 onSendPhoto: widget.photos == null
                     ? null
                     : (jpegBytes) => widget.photos!.send(

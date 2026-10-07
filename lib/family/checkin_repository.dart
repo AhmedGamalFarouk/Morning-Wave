@@ -39,6 +39,14 @@ abstract interface class CheckinRepository {
   /// Tells the family the parent will be away through [backOn], inclusive.
   /// Null clears away mode.
   Future<void> setAway(String familyId, DateTime? backOn);
+
+  /// A child's heart for today's good morning. Only a signed-in child of
+  /// [familyId] may call this; the server rejects anyone else.
+  Future<void> sendLove(String familyId);
+
+  /// The names of the children who sent love in the last day, oldest first,
+  /// each once.
+  Future<List<String>> lovedBy(String familyId);
 }
 
 class SupabaseCheckinRepository implements CheckinRepository {
@@ -87,6 +95,44 @@ class SupabaseCheckinRepository implements CheckinRepository {
   }
 
   @override
+  Future<void> sendLove(String familyId) async {
+    final userId = _db.auth.currentUser?.id;
+    if (userId == null) throw StateError('Sign in to send love.');
+    final member = await _db
+        .from('members')
+        .select('id')
+        .eq('family_id', familyId)
+        .eq('user_id', userId)
+        .eq('role', 'child')
+        .single();
+    await _db.from('family_love').insert({
+      'family_id': familyId,
+      'member_id': member['id'],
+    });
+  }
+
+  @override
+  Future<List<String>> lovedBy(String familyId) async {
+    final since = DateTime.now().subtract(const Duration(days: 1));
+    final love = await _db
+        .from('family_love')
+        .select('member_id')
+        .eq('family_id', familyId)
+        .gt('created_at', since.toUtc().toIso8601String())
+        .order('created_at');
+    final ids = {for (final row in love) row['member_id'] as String};
+    if (ids.isEmpty) return const [];
+    final members = await _db
+        .from('members')
+        .select('id, display_name')
+        .inFilter('id', ids.toList());
+    final names = {
+      for (final m in members) m['id'] as String: m['display_name'] as String,
+    };
+    return [for (final id in ids) ?names[id]];
+  }
+
+  @override
   Future<void> setAway(String familyId, DateTime? backOn) async {
     // Noon on the chosen day, in whatever zone this phone is in. The parent's
     // own phone set the family's time zone (see joinFamily), so this lands
@@ -105,4 +151,33 @@ class SupabaseCheckinRepository implements CheckinRepository {
         .update({'paused_until': pausedUntil})
         .eq('family_id', familyId);
   }
+}
+
+/// When the parent's next "say good morning" reminder should ring: half an
+/// hour before their morning window ends, so they hear it before the family
+/// does. Skips today once they've said it, and the days they're away. Null
+/// when the family has no schedule.
+DateTime? nextMorningReminder(FamilyStatus status, DateTime now) {
+  if (status.usualByHour == null) return null;
+  if (status.away && status.awayUntil == null) return null;
+  DateTime at(DateTime day) => DateTime(
+    day.year,
+    day.month,
+    day.day,
+    status.usualByHour!,
+    status.usualByMinute!,
+  ).subtract(const Duration(minutes: 30));
+  var day = DateTime(now.year, now.month, now.day);
+  if (status.away && status.awayUntil != null) {
+    // Mornings resume the day after the parent is back.
+    final back = status.awayUntil!;
+    final resume = DateTime(back.year, back.month, back.day + 1);
+    if (resume.isAfter(day)) day = resume;
+  }
+  if (status.checkedInToday || !at(day).isAfter(now)) {
+    if (day == DateTime(now.year, now.month, now.day)) {
+      day = DateTime(day.year, day.month, day.day + 1);
+    }
+  }
+  return at(day);
 }

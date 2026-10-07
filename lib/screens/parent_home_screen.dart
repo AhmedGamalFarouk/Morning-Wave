@@ -26,6 +26,7 @@ class ParentHomeScreen extends StatefulWidget {
     this.parentName = PlaceholderFamily.parentName,
     this.latestPhotoUrl,
     this.latestVoiceNoteUrl,
+    this.lovedBy,
     this.loadStatus,
     this.onSayGoodMorning,
     this.onGoAway,
@@ -45,6 +46,10 @@ class ParentHomeScreen extends StatefulWidget {
   /// Fetches a URL for the family's newest voice note, or null if they
   /// haven't sent one yet. Null hides the fetch and the play button.
   final Future<String?> Function()? latestVoiceNoteUrl;
+
+  /// Who in the family sent love in the last day. Null shows no love card,
+  /// as in previews.
+  final Future<List<String>> Function()? lovedBy;
 
   /// Reads today's real check-in and away state, once, when the screen
   /// opens. Overrides [initial]. Null keeps [initial] as given, as in the
@@ -86,6 +91,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
   DateTime? _backOn;
   Timer? _undoTimer;
   var _notesAsked = false;
+  var _lovedBy = const <String>[];
 
   @override
   void initState() {
@@ -95,6 +101,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     ) {
       if (enabled && mounted) setState(() => _notesAsked = true);
     });
+    widget.lovedBy
+        ?.call()
+        .then((names) {
+          if (mounted) setState(() => _lovedBy = names);
+        })
+        .catchError((Object error) {
+          debugPrint('Loading the family’s love: $error');
+        });
     widget.loadStatus
         ?.call()
         .catchError((Object error) {
@@ -234,10 +248,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                         padding: const EdgeInsets.only(top: 8, bottom: 24),
                         child: Column(
                           children: [
-                            // A sample note for the design preview only:
-                            // the family can't send written notes yet.
-                            if (widget.onSayGoodMorning == null)
-                              const _FamilyNote(),
+                            if (_lovedBy.isNotEmpty) _FamilyLove(_lovedBy),
                             if (!_notesAsked &&
                                 widget.requestNotificationPermission !=
                                     null) ...[
@@ -305,44 +316,36 @@ class _Greeting extends StatelessWidget {
   }
 }
 
-/// The reward for saying good morning: a few words from the family.
-class _FamilyNote extends StatelessWidget {
-  const _FamilyNote();
+/// The reward for saying good morning: who in the family sent love.
+class _FamilyLove extends StatelessWidget {
+  const _FamilyLove(this.names);
+
+  final List<String> names;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return PaperCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const HeartMark(),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Your ${PlaceholderFamily.childRelation} sent you some love',
-                  style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          WholeWordsText(
-            '“${PlaceholderFamily.note}”',
-            style: text.headlineSmall,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            PlaceholderFamily.childName,
-            style: text.titleMedium?.copyWith(color: Palette.sageDeep),
+          const HeartMark(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: WholeWordsText(
+              '${namesTogether(names)} sent you some love',
+              style: text.headlineSmall,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
+/// "Sara", "Sara and Ali", "Sara, Ali and Omar".
+String namesTogether(List<String> names) => names.length < 2
+    ? names.join()
+    : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 
 /// Asks for notification permission the way a family member would, after
 /// the parent has already felt why it matters.
