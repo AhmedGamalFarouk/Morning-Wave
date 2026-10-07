@@ -71,7 +71,7 @@ class Notifications {
     await _plugin.zonedSchedule(
       id: _morningReminderId,
       title: 'Good morning ☀️',
-      body: 'Your family would love to hear from you.',
+      body: 'Ready to say hello to your family?',
       scheduledDate: tz.TZDateTime.from(first, tz.local),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(

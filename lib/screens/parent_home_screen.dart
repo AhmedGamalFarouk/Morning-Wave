@@ -47,7 +47,7 @@ class ParentHomeScreen extends StatefulWidget {
   /// haven't sent one yet. Null hides the fetch and the play button.
   final Future<String?> Function()? latestVoiceNoteUrl;
 
-  /// Who in the family sent love in the last day. Null shows no love card,
+  /// Who in the family sent love today. Null shows no love card,
   /// as in previews.
   final Future<List<String>> Function()? lovedBy;
 

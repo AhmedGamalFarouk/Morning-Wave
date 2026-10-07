@@ -44,8 +44,8 @@ abstract interface class CheckinRepository {
   /// [familyId] may call this; the server rejects anyone else.
   Future<void> sendLove(String familyId);
 
-  /// The names of the children who sent love in the last day, oldest first,
-  /// each once.
+  /// The names of the children who sent love today, oldest first, each
+  /// once.
   Future<List<String>> lovedBy(String familyId);
 }
 
@@ -113,7 +113,10 @@ class SupabaseCheckinRepository implements CheckinRepository {
 
   @override
   Future<List<String>> lovedBy(String familyId) async {
-    final since = DateTime.now().subtract(const Duration(days: 1));
+    // Love answers today's good morning, so count from this phone's midnight;
+    // the parent's phone set the family's zone, so it's the family's day.
+    final now = DateTime.now();
+    final since = DateTime(now.year, now.month, now.day);
     final love = await _db
         .from('family_love')
         .select('member_id')
