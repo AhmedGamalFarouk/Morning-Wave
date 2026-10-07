@@ -1,6 +1,9 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
 /// Local notification setup: the channels the app posts to and the
 /// Android 13+ runtime permission.
@@ -47,6 +50,39 @@ class Notifications {
     for (final channel in _channels.values) {
       await _android?.createNotificationChannel(channel);
     }
+    tz_data.initializeTimeZones();
+    try {
+      final zone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zone.identifier));
+    } catch (error) {
+      // UTC then; the reminder may ring at the wrong hour, nothing worse.
+      debugPrint('Reading the time zone for reminders: $error');
+    }
+  }
+
+  static const _morningReminderId = 1;
+
+  /// Rings every day at [first]'s time of day, starting at [first]. Null
+  /// stops it. Inexact, so it needs no alarm permission; a few minutes late
+  /// is fine for a reminder that comes half an hour early.
+  static Future<void> setMorningReminder(DateTime? first) async {
+    await _plugin.cancel(id: _morningReminderId);
+    if (first == null) return;
+    await _plugin.zonedSchedule(
+      id: _morningReminderId,
+      title: 'Good morning ☀️',
+      body: 'Ready to say hello to your family?',
+      scheduledDate: tz.TZDateTime.from(first, tz.local),
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          gentleChannel.id,
+          gentleChannel.name,
+          channelDescription: gentleChannel.description,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time,
+    );
   }
 
   /// Shows the system prompt on Android 13+. Returns true if allowed.

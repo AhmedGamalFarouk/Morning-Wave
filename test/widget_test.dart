@@ -127,16 +127,19 @@ void main() {
     expect(find.text('Yes, bring me notes'), findsNothing);
   });
 
-  testWidgets('tapping the sun says good morning and shows the family note', (
+  testWidgets('tapping the sun says good morning and shows the family’s love', (
     tester,
   ) async {
-    await tester.pumpWidget(_app(const ParentHomeScreen()));
+    await tester.pumpWidget(
+      _app(ParentHomeScreen(lovedBy: () async => ['Sara', 'Ali'])),
+    );
 
+    expect(find.text('Sara and Ali sent you some love'), findsNothing);
     await tester.tap(find.bySemanticsLabel('Say good morning to your family'));
     await _settle(tester);
 
     expect(find.text('Your family knows you’re okay.'), findsOneWidget);
-    expect(find.text('“${PlaceholderFamily.note}”'), findsOneWidget);
+    expect(find.text('Sara and Ali sent you some love'), findsOneWidget);
     expect(find.bySemanticsLabel('Your good morning was sent'), findsOneWidget);
     _expectWarmCopy(tester);
   });

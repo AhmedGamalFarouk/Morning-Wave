@@ -86,6 +86,7 @@ Widget _signedInApp() {
     photos: SupabasePhotoRepository(client),
     voiceNotes: SupabaseVoiceNoteRepository(client),
     checkins: SupabaseCheckinRepository(client),
+    setMorningReminder: Notifications.setMorningReminder,
     requestNotificationPermission: Notifications.requestPermission,
     notificationsEnabled: Notifications.areEnabled,
     currentFcmToken: Notifications.currentToken,

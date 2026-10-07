@@ -23,6 +23,10 @@ typedef ChildParent = ({
   String? childCode,
   VoidCallback? onNewPhone,
 
+  /// Sends a heart for today's good morning. Null keeps "Send love" local
+  /// only, such as in the design preview.
+  Future<void> Function()? onSendLove,
+
   /// Sends a photo to sit in this parent's photo frame. Null hides "Send a
   /// photo", such as in the design preview.
   Future<void> Function(Uint8List jpegBytes)? onSendPhoto,
@@ -51,6 +55,7 @@ class ChildHomeScreen extends StatelessWidget {
         parentCode: null,
         childCode: null,
         onNewPhone: null,
+        onSendLove: null,
         onSendPhoto: null,
         onSendVoiceNote: null,
         loadStatus: null,
@@ -323,9 +328,20 @@ class _ParentHeroState extends State<_ParentHero> {
         });
   }
 
-  void _sendLove() {
+  Future<void> _sendLove() async {
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _loveSent = true);
-    ScaffoldMessenger.of(context).showSnackBar(
+    try {
+      await widget.parent.onSendLove?.call();
+    } catch (error) {
+      debugPrint('Sending love: $error');
+      if (mounted) setState(() => _loveSent = false);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('That didn’t go through. Try again?')),
+      );
+      return;
+    }
+    messenger.showSnackBar(
       SnackBar(content: Text('${widget.parent.name} will see your love.')),
     );
   }
